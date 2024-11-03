@@ -36,18 +36,22 @@ __global__ void categorize_points(Point *d_points, int *d_categories, int *grid_
     int first = 0, second = 0, third = 0, fourth = 0;
 	for (int i = start; i < start + range; i++) {
 		if (i < count) {
+            // bottom left
             if (d_points[i].x <= middle and d_points[i].y <= middle){
 				d_categories[i] = 1;
                 first++;
             }
+            // bottom right
             else if (d_points[i].x > middle and d_points[i].y <= middle){
 				d_categories[i] = 2;
                 second++;
             }
+            // top left
             else if (d_points[i].x <= middle and d_points[i].y > middle){
 				d_categories[i] = 3;
                 third++;
             }
+            // top right
             else if (d_points[i].x > middle and d_points[i].y > middle){
 				d_categories[i] = 4;
                 fourth++;
@@ -67,6 +71,40 @@ __global__ void categorize_points(Point *d_points, int *d_categories, int *grid_
         atomicAdd(&grid_counts[2], subgrid_counts[2]);
         atomicAdd(&grid_counts[3], subgrid_counts[3]);
     }
+}
+
+__global__ void organize_points(Point *d_points, int *d_categories, Point* bl, Point* br, Point* tl, Point* tr, int count, int range) {
+    extern __shared__ int subgrid_index[];
+
+    if (threadIdx.x == 0) {
+        subgrid_index[0] = 0;
+        subgrid_index[1] = 0;
+        subgrid_index[2] = 0;
+        subgrid_index[3] = 0;
+    }
+    __syncthreads();
+    
+    
+	for (int i = threadIdx.x; i < threadIdx.x + range; i++) {
+		if (i < count) {
+            if(d_categories[i] == 1) {
+                bl[subgrid_index[0]] = d_points[i];
+                atomicAdd(&subgrid_index[0], 1);
+            }
+            if(d_categories[i] == 2) {
+                br[subgrid_index[1]] = d_points[i];
+                atomicAdd(&subgrid_index[1], 1);
+            }
+            if(d_categories[i] == 3) {
+                tl[subgrid_index[2]] = d_points[i];
+                atomicAdd(&subgrid_index[2], 1);
+            }
+            if(d_categories[i] == 4) {
+                tr[subgrid_index[3]] = d_points[i];
+                atomicAdd(&subgrid_index[3], 1);
+            }
+		}
+	}
 }
 
 void quadtree_grid(vector<Point> points, int count, int dimension) {
@@ -105,9 +143,6 @@ void quadtree_grid(vector<Point> points, int count, int dimension) {
 	cudaMemcpy(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
 			   cudaMemcpyDeviceToHost);
 
-    cudaFree(d_points);
-    cudaFree(d_categories);
-    cudaFree(d_grid_counts);
 
     //for(int i = 0; i<1000; i++){
         //printf("x = %d, y = %d, category = %d\n", points[i].x, points[i].y, h_categories[i]);
@@ -121,6 +156,43 @@ void quadtree_grid(vector<Point> points, int count, int dimension) {
     //if(total == count){
         //printf("Matches\n");
     //}
+
+	Point *bottom_left, *bottom_right, *top_left, *top_right;
+	cudaMalloc(&bottom_left, h_grid_counts[0] * sizeof(Point));
+	cudaMalloc(&bottom_right, h_grid_counts[1] * sizeof(Point));
+	cudaMalloc(&top_left, h_grid_counts[2] * sizeof(Point));
+	cudaMalloc(&top_right, h_grid_counts[3] * sizeof(Point));
+
+	dim3 grid2(1, 1, 1);
+	dim3 block2(threads_per_block, 1, 1);
+	organize_points<<<grid2, block2, 4 * sizeof(int)>>>(d_points, d_categories, bottom_left, bottom_right, top_left, top_right, count, count / threads_per_block);
+
+    Point *bl, *br, *tl, *tr;
+    bl = (Point*)malloc(h_grid_counts[0] * sizeof(Point));
+    br = (Point*)malloc(h_grid_counts[1] * sizeof(Point));
+    tl = (Point*)malloc(h_grid_counts[2] * sizeof(Point));
+    tr = (Point*)malloc(h_grid_counts[3] * sizeof(Point));
+	cudaMemcpy(bl, bottom_left, h_grid_counts[0] * sizeof(Point),
+			   cudaMemcpyDeviceToHost);
+	cudaMemcpy(br, bottom_right, h_grid_counts[1] * sizeof(Point),
+			   cudaMemcpyDeviceToHost);
+	cudaMemcpy(tl, top_left, h_grid_counts[2] * sizeof(Point),
+			   cudaMemcpyDeviceToHost);
+	cudaMemcpy(tr, top_right, h_grid_counts[3] * sizeof(Point),
+			   cudaMemcpyDeviceToHost);
+
+    printf("Point in bottom left - %d %d\n", bl[0].x, bl[0].y);
+    printf("Point in bottom right - %d %d\n", br[0].x, br[0].y);
+    printf("Point in top left - %d %d\n", tl[0].x, tl[0].y);
+    printf("Point in top right - %d %d\n", tr[0].x, tr[0].y);
+
+    cudaFree(d_points);
+    cudaFree(d_categories);
+    cudaFree(d_grid_counts);
+    cudaFree(bottom_left);
+    cudaFree(bottom_right);
+    cudaFree(top_left);
+    cudaFree(top_right);
 }
 
 int main() {
