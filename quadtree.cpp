@@ -201,21 +201,48 @@ Node* QuadTree :: search(Point p) {
     }
 };
 
+// Function to parse the .txt file and return a vector of Points
+vector<pair<int,int>> parseCoordinates(const string& filename) {
+    vector<pair<int,int>> coordinates;
+    ifstream infile(filename);
+
+    if (!infile) {
+        cerr << "Error: Could not open file " << filename << endl;
+        exit(0);
+    }
+
+    string line;
+    while (getline(infile, line)) {
+        stringstream ss(line);
+        int x, y;
+        if (ss >> x >> y) {
+            coordinates.push_back({x, y});
+        }
+    }
+
+    infile.close();
+    return coordinates;
+}
+
+
 
 int main() {
     // Random Grid
     cout<<"START\n";
-    QuadTree* root = new QuadTree(Point(-8, 8), Point(8, -8));
+    QuadTree* root = new QuadTree(Point(0, 1000), Point(1000, 0));
     printf("QuadTree Created\n");
 
-    root -> insert(new Node(Point(1, 1), 1));
-    root -> insert(new Node(Point(2, 5), 2));
-    root -> insert(new Node(Point(7, 6), 3));
-    printf("insert completed\n");
+    string ifile = "points.txt";
+    vector<pair<int,int>> Coord = parseCoordinates(ifile);
 
-    printf("Node 1 value: %d\n", root->search(Point(1,1))->data);
-    printf("Node 2 value: %d\n", root->search(Point(2,5))->data);
-    printf("Node 3 value: %d\n", root->search(Point(7,6))->data);
+    int len = Coord.size();
+    printf("Entering Points to the QuadTree\n");
+    for(int idx = 0; idx < len; idx ++){
+        root -> insert(new Node(Point(Coord[idx].first, Coord[idx].second), idx + 1));
+    }
+    printf("Finished entering Points to the QuadTree\n");
+
+    printf("Value associated with point 1028 in the QuadTree is %d\n", root -> search(Point(Coord[1027].first, Coord[1027].second))->data);
 
     return 0;
 }
