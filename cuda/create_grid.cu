@@ -11,20 +11,22 @@ using namespace std;
 #define mp make_pair
 #define fi first
 #define se second
-#define MIN_POINTS 5
-#define MIN_DISTANCE 5
+#define MIN_POINTS 5.0
+#define MIN_DISTANCE 5.0
 
-Grid *quadtree_grid(Point *points, int count, pair<int, int> bottom_left_corner,
-					pair<int, int> top_right_corner, int level) {
-	int x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
+Grid *quadtree_grid(Point *points, int count, pair<float, float> bottom_left_corner,
+					pair<float, float> top_right_corner, int level) {
+	float x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
 		x2 = top_right_corner.fi, y2 = top_right_corner.se;
 
 	if (count < MIN_POINTS or
 		(abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
-		return new Grid(nullptr, nullptr, nullptr, nullptr, points);
+			pair<float, float> upperBound = make_pair(x2, y2);
+			pair<float, float> lowerBound = make_pair(x1, y1);
+			return new Grid(nullptr, nullptr, nullptr, nullptr, points, upperBound, lowerBound, count);
 	}
 
-	printf("%d: Creating grid from (%d,%d) to (%d,%d) for %d points\n", level,
+	printf("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
 		   x1, y1, x2, y2, count);
 
 	// Array of points for the geospatial data
@@ -57,8 +59,8 @@ Grid *quadtree_grid(Point *points, int count, pair<int, int> bottom_left_corner,
 	dim3 block(threads_per_block, 1, 1);
 
 	// KERNEL Function to categorize points into 4 subgrids
-	int middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
-	printf("mid_x = %d, mid_y = %d\n", middle_x, middle_y);
+	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
+	printf("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
 
 	printf(
 		"%d: Categorize in GPU: %d blocks of %d threads each with range=%d\n",
@@ -145,7 +147,11 @@ Grid *quadtree_grid(Point *points, int count, pair<int, int> bottom_left_corner,
 	tr_grid = quadtree_grid(tr, h_grid_counts[3], mp(middle_x, middle_y),
 							top_right_corner, level + 1);
 
-	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, points);
+	// The bounds of the grid
+	pair<float, float> upperBound = make_pair(x2, y2);
+	pair<float, float> lowerBound = make_pair(x1, y1);
+
+	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, points, upperBound, lowerBound, count);
 }
 
 int main(int argc, char *argv[]) {
@@ -156,7 +162,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	string filename = argv[1];
-	int max_size = atoi(argv[2]);
+	float max_size = atof(argv[2]);
 
 	ifstream file(filename);
 	if (!file) {
@@ -165,13 +171,13 @@ int main(int argc, char *argv[]) {
 	}
 
 	string line;
-	int x, y;
+	float x, y;
 	vector<Point> points;
 	int point_count = 0;
 	while (getline(file, line)) {
 		istringstream iss(line);
 		if (iss >> x >> y) {
-			Point p = Point(x, y);
+			Point p = Point((float)x, (float)y);
 			points.emplace_back(p);
 			point_count++;
 		} else {
@@ -185,8 +191,17 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < point_count; i++) {
 		points_array[i] = points[i];
 	}
-	Grid *root_grid = quadtree_grid(points_array, point_count, mp(0, 0),
-									mp(max_size, max_size), 0);
+	Grid *root_grid = quadtree_grid(points_array, point_count, mp(0.0, 0.0), mp(max_size, max_size), 0);
+
+	printf("Validating grid...\n");
+	pair<float, float> lowerBound = make_pair(0.0, 0.0);
+	pair<float, float> upperBound = make_pair(max_size, max_size);
+	bool check = validateGrid(root_grid, upperBound, lowerBound);
+	
+	if(check == true)
+		printf("Grid Verification Success!\n");
+	else
+		printf("Grid Verification Failure!\n");
 
 	return 0;
 }
