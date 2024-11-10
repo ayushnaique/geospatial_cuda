@@ -6,7 +6,7 @@ using namespace std;
 
 __global__ void categorize_points(Point *d_points, int *d_categories,
 								  int *grid_counts, int count, int range,
-								  int middle_x, int middle_y) {
+								  float middle_x, float middle_y) {
 	// subgrid_counts declared outside kernel, Dynamic Shared Memory
 	// Accessed using extern
 	extern __shared__ int subgrid_counts[];
@@ -102,4 +102,63 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 			}
 		}
 	}
+}
+
+
+// Validation Function
+bool validateGrid(Grid* root_grid, pair<float, float>& TopRight, pair<float, float>& BottomLeft){
+    if(root_grid == nullptr)
+        return true;
+
+    // If we have reached the bottom of the grid, we start validation
+    if(root_grid -> points) {
+        Point* point_array = root_grid -> points;
+        float Top_x = TopRight.first;
+        float Top_y = TopRight.second;
+
+        float Bot_x = BottomLeft.first;
+        float Bot_y = BottomLeft.second;
+
+        float Mid_x = (Top_x + Bot_x) / 2;
+        float Mid_y = (Top_y + Bot_y) / 2;
+
+        int count = root_grid -> count;
+
+        for(int i = 0; i < count; i ++){
+            float point_x = point_array[i].x;
+            float point_y = point_array[i].y;
+
+            if(point_x < Bot_x || point_x > Top_x){
+                printf("Validation Error! Point (%f, %f) is plced out of bounds. Grid dimension: [(%f, %f), (%f, %f)]\n", point_x, point_y, Bot_x, Bot_y, Top_x, Top_y);
+                return false;
+            }
+            else if(point_y < Bot_y || point_y > Top_y){
+                printf("Validation Error! Point (%f, %f) is plced out of bounds. Grid dimension: [(%f, %f), (%f, %f)]\n", point_x, point_y, Bot_x, Bot_y, Top_x, Top_y);
+                return false;
+            }
+            else{
+                continue;
+            }
+        }
+
+        return true;
+    }
+
+    // Call Recursively for all 4 quadrants
+    Grid* top_left_child     = nullptr;
+    Grid* top_right_child    = nullptr;
+    Grid* bottom_left_child  = nullptr;
+    Grid* bottom_right_child = nullptr;
+
+    top_left_child     = root_grid -> top_left;
+    top_right_child    = root_grid -> top_right;
+    bottom_left_child  = root_grid -> bottom_left;
+    bottom_right_child = root_grid -> bottom_right;
+
+    bool check_topLeft     = validateGrid(top_left_child, top_left_child->topRight, top_left_child->bottomLeft);
+    bool check_topRight    = validateGrid(top_right_child, top_right_child->topRight, top_right_child->bottomLeft);
+    bool check_bottomLeft  = validateGrid(bottom_left_child, bottom_left_child->topRight, bottom_left_child->bottomLeft);
+    bool check_bottomRight = validateGrid(bottom_right_child, bottom_right_child->topRight, bottom_right_child->bottomLeft);
+
+    return check_topLeft && check_topRight && check_bottomLeft && check_bottomRight;
 }
