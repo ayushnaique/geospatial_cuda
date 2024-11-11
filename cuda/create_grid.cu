@@ -1,6 +1,7 @@
 #include <bits/stdc++.h>
 #include <cuda_runtime.h>
 #include <kernels.h>
+#include <time.h>
 
 #include <cmath>
 #include <fstream>
@@ -14,16 +15,18 @@ using namespace std;
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
 
-Grid *quadtree_grid(Point *points, int count, pair<float, float> bottom_left_corner,
+Grid *quadtree_grid(Point *points, int count,
+					pair<float, float> bottom_left_corner,
 					pair<float, float> top_right_corner, int level) {
 	float x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
-		x2 = top_right_corner.fi, y2 = top_right_corner.se;
+		  x2 = top_right_corner.fi, y2 = top_right_corner.se;
 
 	if (count < MIN_POINTS or
 		(abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
-			pair<float, float> upperBound = make_pair(x2, y2);
-			pair<float, float> lowerBound = make_pair(x1, y1);
-			return new Grid(nullptr, nullptr, nullptr, nullptr, points, upperBound, lowerBound, count);
+		pair<float, float> upper_bound = make_pair(x2, y2);
+		pair<float, float> lower_bound = make_pair(x1, y1);
+		return new Grid(nullptr, nullptr, nullptr, nullptr, points, upper_bound,
+						lower_bound, count);
 	}
 
 	printf("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
@@ -148,10 +151,11 @@ Grid *quadtree_grid(Point *points, int count, pair<float, float> bottom_left_cor
 							top_right_corner, level + 1);
 
 	// The bounds of the grid
-	pair<float, float> upperBound = make_pair(x2, y2);
-	pair<float, float> lowerBound = make_pair(x1, y1);
+	pair<float, float> upper_bound = make_pair(x2, y2);
+	pair<float, float> lower_bound = make_pair(x1, y1);
 
-	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, points, upperBound, lowerBound, count);
+	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, points, upper_bound,
+					lower_bound, count);
 }
 
 int main(int argc, char *argv[]) {
@@ -187,18 +191,27 @@ int main(int argc, char *argv[]) {
 
 	file.close();
 
+	double time_taken;
+	clock_t start, end;
+
 	Point *points_array = (Point *)malloc(point_count * sizeof(Point));
 	for (int i = 0; i < point_count; i++) {
 		points_array[i] = points[i];
 	}
-	Grid *root_grid = quadtree_grid(points_array, point_count, mp(0.0, 0.0), mp(max_size, max_size), 0);
+	start = clock();
+	Grid *root_grid = quadtree_grid(points_array, point_count, mp(0.0, 0.0),
+									mp(max_size, max_size), 0);
+	end = clock();
+
+	time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
+	printf("Time taken = %lf\n\n", time_taken);
 
 	printf("Validating grid...\n");
-	pair<float, float> lowerBound = make_pair(0.0, 0.0);
-	pair<float, float> upperBound = make_pair(max_size, max_size);
-	bool check = validateGrid(root_grid, upperBound, lowerBound);
-	
-	if(check == true)
+	pair<float, float> lower_bound = make_pair(0.0, 0.0);
+	pair<float, float> upper_bound = make_pair(max_size, max_size);
+	bool check = validate_grid(root_grid, upper_bound, lower_bound);
+
+	if (check == true)
 		printf("Grid Verification Success!\n");
 	else
 		printf("Grid Verification Failure!\n");
