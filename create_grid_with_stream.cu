@@ -87,7 +87,7 @@ void quadtree_grid(Point *points, int count,
 
     // KERNEL Function to categorize points into 4 subgrids
     float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
-    printf("middle_x = %d, middle_y = %d \n", middle_x, middle_y);
+    printf("middle_x = %f, middle_y = %f \n", middle_x, middle_y);
     categorize_points<<<grid, block, 4 * sizeof(int), stream>>>(
         d_points, d_categories, d_grid_counts, count, range, middle_x,
         middle_y);
@@ -129,7 +129,7 @@ void quadtree_grid(Point *points, int count,
            threads_per_block, range);
     organize_points<<<grid2, block2, 4 * sizeof(int), stream>>>(
         d_points, d_categories, bottom_left, bottom_right, top_left, top_right,
-        count, count / threads_per_block);
+        count, range);
 
     // Declare the final array in which we store the sorted points according to
     // the location in the grid
@@ -150,7 +150,7 @@ void quadtree_grid(Point *points, int count,
                     cudaMemcpyDeviceToHost, stream);
 
     Grid *bottom_left_grid = new Grid(nullptr, nullptr, nullptr, nullptr, bl, mp(x1, y1), mp(middle_x, middle_y), h_grid_counts[0]);
-    Grid *bottom_right_grid = new Grid(nullptr, nullptr, nullptr, nullptr, br, mp(middle_x, y1), mp(x2, middle_y), h_grid_counts[1]);
+    Grid *bottom_right_grid = new Grid(nullptr, nullptr, nullptr, nullptr, br, mp(middle_x, y1), mp(x1, middle_y), h_grid_counts[1]);
     Grid *top_left_grid = new Grid(nullptr, nullptr, nullptr, nullptr, tl, mp(x1, middle_y), mp(middle_x, y2), h_grid_counts[2]);
     Grid *top_right_grid = new Grid(nullptr, nullptr, nullptr, nullptr, tr, mp(middle_x, middle_y), mp(x2, y2), h_grid_counts[3]);
 
@@ -222,7 +222,7 @@ Grid *build_quadtree_levels(Point *points, int point_count, queue<Grid *> *grid_
                 recursive_grids.push(popped_grid);
             }
 
-            int x1 = popped_grid->bottomLeft.fi, y1 = popped_grid->bottomLeft.se,
+            float x1 = popped_grid->bottomLeft.fi, y1 = popped_grid->bottomLeft.se,
                 x2 = popped_grid->topRight.fi, y2 = popped_grid->topRight.se;
             if (!(popped_grid->count < MIN_POINTS or (abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)))
             {
@@ -252,10 +252,10 @@ Grid *build_quadtree_levels(Point *points, int point_count, queue<Grid *> *grid_
 
 int main(int argc, char *argv[])
 {
-    int initial_bl_fi;
-    int initial_bl_se;
-    int initial_tr_fi;
-    int initial_tr_se;
+    float initial_bl_fi;
+    float initial_bl_se;
+    float initial_tr_fi;
+    float initial_tr_se;
 
     if (argc != 5)
     {
@@ -265,10 +265,10 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    initial_bl_fi = (unsigned int)atoi(argv[1]);
-    initial_bl_se = (unsigned int)atoi(argv[2]);
-    initial_tr_fi = (unsigned int)atoi(argv[3]);
-    initial_tr_se = (unsigned int)atoi(argv[4]);
+    initial_bl_fi = atof(argv[1]);
+    initial_bl_se = atof(argv[2]);
+    initial_tr_fi = atof(argv[3]);
+    initial_tr_se = atof(argv[4]);
 
     string filename = "points.txt";
     vector<Point> points;
