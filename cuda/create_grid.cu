@@ -1,12 +1,13 @@
 #include <bits/stdc++.h>
 #include <cuda_runtime.h>
-#include <kernels.h>
 #include <time.h>
 
 #include <cmath>
 #include <fstream>
 #include <sstream>
 #include <vector>
+
+#include "kernels.h"
 using namespace std;
 
 #define mp make_pair
@@ -59,12 +60,11 @@ Grid *quadtree_grid(Point *points, int count,
 
 	// Set the number of blocks and threads per block
 	int range, num_blocks, threads_per_block = MAX_THREADS_PER_BLOCK;
-	if(count <= MAX_THREADS_PER_BLOCK) {
+	if (count <= MAX_THREADS_PER_BLOCK) {
 		float warps = static_cast<float>(count) / 32;
 		threads_per_block = ceil(warps) * 32;
 		num_blocks = 1;
-	}
-	else {
+	} else {
 		float blocks = static_cast<float>(count) / MAX_THREADS_PER_BLOCK;
 		num_blocks = min(32.0, ceil(blocks));
 	}
