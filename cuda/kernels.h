@@ -1,6 +1,10 @@
 #include <bits/stdc++.h>
+#include <cooperative_groups.h>
 #include <cuda_runtime.h>
+
 #include <utility>
+namespace cg = cooperative_groups;
+using namespace std;
 
 struct Point {
 	float x, y;
@@ -16,20 +20,24 @@ struct Grid {
 	int count;
 
 	// Grid Dimension
-	std :: pair<float, float> topRight;
-	std :: pair<float, float> bottomLeft;
+	std ::pair<float, float> top_right_corner;
+	std ::pair<float, float> bottom_left_corner;
 
 	// Initialize the corresponding Point values
-	Grid(Grid *bl, Grid *br, Grid *tl, Grid *tr, Point *ps, std :: pair<float, float> uB, std :: pair<float, float> lB, int c)
+	Grid(Grid *bl, Grid *br, Grid *tl, Grid *tr, Point *ps,
+		 pair<float, float> uB, pair<float, float> lB, int c)
 		: bottom_left(bl),
 		  bottom_right(br),
 		  top_left(tl),
 		  top_right(tr),
 		  points(ps),
-		  topRight(uB),
-		  bottomLeft(lB),
-		  count(c){}
+		  top_right_corner(uB),
+		  bottom_left_corner(lB),
+		  count(c) {}
 };
+
+__inline__ __device__ int warpReduceSum(int value,
+										cg::thread_block_tile<32> warp);
 
 __global__ void categorize_points(Point *d_points, int *d_categories,
 								  int *grid_counts, int count, int range,
@@ -39,4 +47,5 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 								Point *br, Point *tl, Point *tr, int count,
 								int range);
 
-bool validateGrid(Grid* root_grid, std :: pair<float, float>& TopRight, std :: pair<float, float>& BottomLeft);
+bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
+				   pair<float, float> &bottom_left_corner);
