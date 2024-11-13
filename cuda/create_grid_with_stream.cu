@@ -237,6 +237,11 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 			}
 		}
 
+		int size = current_grid->count;
+		for(int i = size - 1; i>=max(0, size - 10); i--){
+			printf("%f %f\n", current_grid->points[i].x, current_grid->points[i].y);
+		}
+
 		cudaDeviceSynchronize();
 
 		for (int i = 0; i < batch; i++) {
@@ -293,7 +298,7 @@ int main(int argc, char *argv[]) {
 	while (getline(file, line)) {
 		istringstream iss(line);
 		if (iss >> x >> y) {
-			Point p = Point(x, y);
+			Point p = Point((float)x, (float)y);
 			points.emplace_back(p);
 			point_count++;
 		} else {
@@ -307,7 +312,11 @@ int main(int argc, char *argv[]) {
 	pair<float, float> root_tr = mp(initial_tr_fi, initial_tr_se);
 
 	queue<Grid *> grid_q;
-	Grid *root_grid = build_quadtree_levels(&points[0], point_count, &grid_q,
+	Point *points_array = (Point *)malloc(point_count * sizeof(Point));
+	for (int i = 0; i < point_count; i++) {
+		points_array[i] = points[i];
+	}
+	Grid *root_grid = build_quadtree_levels(points_array, point_count, &grid_q,
 											root_bl, root_tr);
 
 	printf("Validating grid...\n");
