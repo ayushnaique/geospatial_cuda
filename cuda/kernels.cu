@@ -1,8 +1,21 @@
 #include <bits/stdc++.h>
+#include <cooperative_groups.h>
 #include <cuda_runtime.h>
+
 #include "kernels.h"
 
 using namespace std;
+namespace cg = cooperative_groups;
+
+__inline__ __device__ int reduce_sum(int value,
+									 cg::thread_block_tile<32> warp) {
+	// Perform warp-wide reduction using shfl_down_sync
+	// Refer https://developer.nvidia.com/blog/using-cuda-warp-level-primitives/
+	for (int offset = warp.size() / 2; offset > 0; offset /= 2) {
+		value += __shfl_down_sync(0xFFFFFFFF, value, offset);
+	}
+	return value;
+}
 
 __global__ void categorize_points(Point *d_points, int *d_categories,
 								  int *grid_counts, int count, int range,
@@ -12,6 +25,10 @@ __global__ void categorize_points(Point *d_points, int *d_categories,
 	extern __shared__ int subgrid_counts[];
 
 	int start = ((blockIdx.x * blockDim.x) + threadIdx.x) * range;
+
+	// create a thread group for 32 threads (warp grouping)
+	cg::thread_block block = cg::this_thread_block();
+	cg::thread_block_tile<32> warp = cg::tiled_partition<32>(block);
 
 	// Initialize the subgrid counts to 0
 	if (threadIdx.x == 0) {
@@ -48,13 +65,19 @@ __global__ void categorize_points(Point *d_points, int *d_categories,
 		}
 	}
 
-	// CUDA built in function to perform atomic addition at given location
-	// Location : first variable
-	// Store the counts of points in their respective subgrid
-	atomicAdd(&subgrid_counts[0], first);
-	atomicAdd(&subgrid_counts[1], second);
-	atomicAdd(&subgrid_counts[2], third);
-	atomicAdd(&subgrid_counts[3], fourth);
+	// sum up all the sub quadrant counts inside a warp
+	first = reduce_sum(first, warp);
+	second = reduce_sum(second, warp);
+	third = reduce_sum(third, warp);
+	fourth = reduce_sum(fourth, warp);
+
+	// Only the first thread in each warp writes to shared memory
+	if (warp.thread_rank() == 0) {
+		atomicAdd(&subgrid_counts[0], first);
+		atomicAdd(&subgrid_counts[1], second);
+		atomicAdd(&subgrid_counts[2], third);
+		atomicAdd(&subgrid_counts[3], fourth);
+	}
 	__syncthreads();
 
 	// Add the values of subgrid_counts to grid_counts
@@ -104,61 +127,73 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 	}
 }
 
-
 // Validation Function
-bool validateGrid(Grid* root_grid, pair<float, float>& TopRight, pair<float, float>& BottomLeft){
-    if(root_grid == nullptr)
-        return true;
+bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
+				   pair<float, float> &bottom_left_corner) {
+	if (root_grid == nullptr) return true;
 
-    // If we have reached the bottom of the grid, we start validation
-    if(root_grid -> points) {
-        Point* point_array = root_grid -> points;
-        float Top_x = TopRight.first;
-        float Top_y = TopRight.second;
+	// If we have reached the bottom of the grid, we start validation
+	if (root_grid->points) {
+		Point *point_array = root_grid->points;
+		float top_x = top_right_corner.first;
+		float top_y = top_right_corner.second;
 
-        float Bot_x = BottomLeft.first;
-        float Bot_y = BottomLeft.second;
+		float bot_x = bottom_left_corner.first;
+		float bot_y = bottom_left_corner.second;
 
-        float Mid_x = (Top_x + Bot_x) / 2;
-        float Mid_y = (Top_y + Bot_y) / 2;
+		float mid_x = (top_x + bot_x) / 2;
+		float mid_y = (top_y + bot_y) / 2;
 
-        int count = root_grid -> count;
+		int count = root_grid->count;
 
-        for(int i = 0; i < count; i ++){
-            float point_x = point_array[i].x;
-            float point_y = point_array[i].y;
+		for (int i = 0; i < count; i++) {
+			float point_x = point_array[i].x;
+			float point_y = point_array[i].y;
 
-            if(point_x < Bot_x || point_x > Top_x){
-                printf("Validation Error! Point (%f, %f) is plced out of bounds. Grid dimension: [(%f, %f), (%f, %f)]\n", point_x, point_y, Bot_x, Bot_y, Top_x, Top_y);
-                return false;
-            }
-            else if(point_y < Bot_y || point_y > Top_y){
-                printf("Validation Error! Point (%f, %f) is plced out of bounds. Grid dimension: [(%f, %f), (%f, %f)]\n", point_x, point_y, Bot_x, Bot_y, Top_x, Top_y);
-                return false;
-            }
-            else{
-                continue;
-            }
-        }
+			if (point_x < bot_x || point_x > top_x) {
+				printf(
+					"Validation Error! Point (%f, %f) is plced out of bounds. "
+					"Grid dimension: [(%f, %f), (%f, %f)]\n",
+					point_x, point_y, bot_x, bot_y, top_x, top_y);
+				return false;
+			} else if (point_y < bot_y || point_y > top_y) {
+				printf(
+					"Validation Error! Point (%f, %f) is plced out of bounds. "
+					"Grid dimension: [(%f, %f), (%f, %f)]\n",
+					point_x, point_y, bot_x, bot_y, top_x, top_y);
+				return false;
+			} else {
+				continue;
+			}
+		}
 
-        return true;
-    }
+		return true;
+	}
 
-    // Call Recursively for all 4 quadrants
-    Grid* top_left_child     = nullptr;
-    Grid* top_right_child    = nullptr;
-    Grid* bottom_left_child  = nullptr;
-    Grid* bottom_right_child = nullptr;
+	// Call Recursively for all 4 quadrants
+	Grid *top_left_child = nullptr;
+	Grid *top_right_child = nullptr;
+	Grid *bottom_left_child = nullptr;
+	Grid *bottom_right_child = nullptr;
 
-    top_left_child     = root_grid -> top_left;
-    top_right_child    = root_grid -> top_right;
-    bottom_left_child  = root_grid -> bottom_left;
-    bottom_right_child = root_grid -> bottom_right;
+	top_left_child = root_grid->top_left;
+	top_right_child = root_grid->top_right;
+	bottom_left_child = root_grid->bottom_left;
+	bottom_right_child = root_grid->bottom_right;
 
-    bool check_topLeft     = validateGrid(top_left_child, top_left_child->topRight, top_left_child->bottomLeft);
-    bool check_topRight    = validateGrid(top_right_child, top_right_child->topRight, top_right_child->bottomLeft);
-    bool check_bottomLeft  = validateGrid(bottom_left_child, bottom_left_child->topRight, bottom_left_child->bottomLeft);
-    bool check_bottomRight = validateGrid(bottom_right_child, bottom_right_child->topRight, bottom_right_child->bottomLeft);
+	bool check_top_left =
+		validate_grid(top_left_child, top_left_child->top_right_corner,
+					  top_left_child->bottom_left_corner);
+	bool check_top_right =
+		validate_grid(top_right_child, top_right_child->top_right_corner,
+					  top_right_child->bottom_left_corner);
+	bool check_bottom_left =
+		validate_grid(bottom_left_child, bottom_left_child->top_right_corner,
+					  bottom_left_child->bottom_left_corner);
+	bool check_bottom_right =
+		validate_grid(bottom_right_child, bottom_right_child->top_right_corner,
+					  bottom_right_child->bottom_left_corner);
 
-    return check_topLeft && check_topRight && check_bottomLeft && check_bottomRight;
+	return check_top_left && check_top_right && check_bottom_left &&
+		   check_bottom_right;
 }
