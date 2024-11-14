@@ -66,9 +66,6 @@ Grid *quadtree_grid(Point *points, int count,
 	float value = static_cast<float>(count) / (num_blocks * threads_per_block);
 	range = max(1.0, ceil(value));
 
-	dim3 grid(num_blocks, 1, 1);
-	dim3 block(threads_per_block, 1, 1);
-
 	// KERNEL Function to categorize points into 4 subgrids
 	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
 	vprint("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
@@ -101,9 +98,6 @@ Grid *quadtree_grid(Point *points, int count,
 	cudaMallocManaged(&bottom_right, d_grid_counts[1] * sizeof(Point));
 	cudaMallocManaged(&top_left, d_grid_counts[2] * sizeof(Point));
 	cudaMallocManaged(&top_right, d_grid_counts[3] * sizeof(Point));
-
-	dim3 grid2(1, 1, 1);
-	dim3 block2(threads_per_block, 1, 1);
 
 	// KERNEL Function to assign the points to its respective array
 	value = static_cast<float>(count) / threads_per_block;

@@ -16,6 +16,7 @@ using namespace std;
 #define se second
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
+#define MAX_THREADS_PER_BLOCK 512
 
 void addGrid(Grid *current_grid, Grid *quad_grid, int i) {
 	switch (i) {
@@ -73,7 +74,15 @@ void quadtree_grid(Point *points, int count,
 					cudaMemcpyHostToDevice, stream);
 
 	// Set the number of blocks and threads per block
-	int range, num_blocks = 16, threads_per_block = 256;
+	int range, num_blocks, threads_per_block = MAX_THREADS_PER_BLOCK;
+	if (count <= MAX_THREADS_PER_BLOCK) {
+		float warps = static_cast<float>(count) / 32;
+		threads_per_block = ceil(warps) * 32;
+		num_blocks = 1;
+	} else {
+		float blocks = static_cast<float>(count) / MAX_THREADS_PER_BLOCK;
+		num_blocks = min(32.0, ceil(blocks));
+	}
 
 	// Calculate the work done by each thread
 	float value = static_cast<float>(count) / (num_blocks * threads_per_block);
@@ -81,15 +90,12 @@ void quadtree_grid(Point *points, int count,
 	printf("Categorize in GPU: %d blocks of %d threads each with range=%d\n",
 		   num_blocks, threads_per_block, range);
 
-	dim3 grid(num_blocks, 1, 1);
-	dim3 block(threads_per_block, 1, 1);
-
 	// KERNEL Function to categorize points into 4 subgrids
 	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
 	printf("middle_x = %f, middle_y = %f \n", middle_x, middle_y);
-	categorize_points<<<grid, block, 4 * sizeof(int), stream>>>(
-		d_points, d_categories, d_grid_counts, count, range, middle_x,
-		middle_y);
+	categorize_points<<<num_blocks, threads_per_block, 4 * sizeof(int),
+						stream>>>(d_points, d_categories, d_grid_counts, count,
+								  range, middle_x, middle_y);
 
 	// Get back the data from device to host
 	cudaMemcpyAsync(h_categories.data(), d_categories, count * sizeof(int),
@@ -118,15 +124,12 @@ void quadtree_grid(Point *points, int count,
 
 	cudaStreamSynchronize(stream);
 
-	dim3 grid2(1, 1, 1);
-	dim3 block2(threads_per_block, 1, 1);
-
 	// KERNEL Function to assign the points to its respective array
 	value = static_cast<float>(count) / threads_per_block;
 	range = max(1.0, ceil(value));
 	printf("Organize in GPU: 1 block of %d threads each with range=%d\n",
 		   threads_per_block, range);
-	organize_points<<<grid2, block2, 4 * sizeof(int), stream>>>(
+	organize_points<<<1, threads_per_block, 4 * sizeof(int), stream>>>(
 		d_points, d_categories, bottom_left, bottom_right, top_left, top_right,
 		count, range);
 
@@ -149,17 +152,17 @@ void quadtree_grid(Point *points, int count,
 					cudaMemcpyDeviceToHost, stream);
 
 	Grid *bottom_left_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, bl,
-				 mp(middle_x, middle_y),  mp(x1, y1), h_grid_counts[0]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, bl, mp(middle_x, middle_y),
+				 mp(x1, y1), h_grid_counts[0]);
 	Grid *bottom_right_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, br,
-				 mp(x2, middle_y), mp(middle_x, y1), h_grid_counts[1]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, br, mp(x2, middle_y),
+				 mp(middle_x, y1), h_grid_counts[1]);
 	Grid *top_left_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, tl,
-				 mp(middle_x, y2), mp(x1, middle_y), h_grid_counts[2]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, tl, mp(middle_x, y2),
+				 mp(x1, middle_y), h_grid_counts[2]);
 	Grid *top_right_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, tr,
-				 mp(x2, y2), mp(middle_x, middle_y), h_grid_counts[3]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, tr, mp(x2, y2),
+				 mp(middle_x, middle_y), h_grid_counts[3]);
 
 	grid_q->push(bottom_left_grid);
 	grid_q->push(bottom_right_grid);
@@ -226,9 +229,9 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 			}
 
 			float x1 = popped_grid->bottom_left_corner.fi,
-				y1 = popped_grid->bottom_left_corner.se,
-				x2 = popped_grid->top_right_corner.fi,
-				y2 = popped_grid->top_right_corner.se;
+				  y1 = popped_grid->bottom_left_corner.se,
+				  x2 = popped_grid->top_right_corner.fi,
+				  y2 = popped_grid->top_right_corner.se;
 			if (!(popped_grid->count < MIN_POINTS or
 				  (abs(x1 - x2) < MIN_DISTANCE and
 				   abs(y1 - y2) < MIN_DISTANCE))) {
