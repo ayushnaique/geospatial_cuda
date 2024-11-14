@@ -1,12 +1,13 @@
 #include <bits/stdc++.h>
 #include <cuda_runtime.h>
-#include <kernels.h>
 #include <time.h>
 
 #include <cmath>
 #include <fstream>
 #include <sstream>
 #include <vector>
+
+#include "kernels.h"
 using namespace std;
 
 #define mp make_pair
@@ -14,6 +15,12 @@ using namespace std;
 #define se second
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
+#define MAX_THREADS_PER_BLOCK 512
+#define VERBOSE false
+#define vprint(s...) \
+	if (VERBOSE) {   \
+		printf(s);   \
+	}
 
 Grid *quadtree_grid(Point *points, int count,
 					pair<float, float> bottom_left_corner,
@@ -29,7 +36,7 @@ Grid *quadtree_grid(Point *points, int count,
 						lower_bound, count);
 	}
 
-	printf("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
+	vprint("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
 		   x1, y1, x2, y2, count);
 
 	// Array of points for the geospatial data
@@ -52,7 +59,15 @@ Grid *quadtree_grid(Point *points, int count,
 	cudaMemcpy(d_points, points, count * sizeof(Point), cudaMemcpyHostToDevice);
 
 	// Set the number of blocks and threads per block
-	int range, num_blocks = 16, threads_per_block = 256;
+	int range, num_blocks, threads_per_block = MAX_THREADS_PER_BLOCK;
+	if (count <= MAX_THREADS_PER_BLOCK) {
+		float warps = static_cast<float>(count) / 32;
+		threads_per_block = ceil(warps) * 32;
+		num_blocks = 1;
+	} else {
+		float blocks = static_cast<float>(count) / MAX_THREADS_PER_BLOCK;
+		num_blocks = min(32.0, ceil(blocks));
+	}
 
 	// Calculate the work done by each thread
 	float value = static_cast<float>(count) / (num_blocks * threads_per_block);
@@ -63,9 +78,9 @@ Grid *quadtree_grid(Point *points, int count,
 
 	// KERNEL Function to categorize points into 4 subgrids
 	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
-	printf("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
+	vprint("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
 
-	printf(
+	vprint(
 		"%d: Categorize in GPU: %d blocks of %d threads each with range=%d\n",
 		level, num_blocks, threads_per_block, range);
 	categorize_points<<<grid, block, 4 * sizeof(int)>>>(
@@ -79,14 +94,14 @@ Grid *quadtree_grid(Point *points, int count,
 			   cudaMemcpyDeviceToHost);
 
 	int total = 0;
-	printf("%d: Point counts per sub grid - \n", level);
+	vprint("%d: Point counts per sub grid - \n", level);
 	for (int i = 0; i < 4; i++) {
-		printf("sub grid %d - %d\n", i + 1, h_grid_counts[i]);
+		vprint("sub grid %d - %d\n", i + 1, h_grid_counts[i]);
 		total += h_grid_counts[i];
 	}
-	printf("Total Count - %d\n", count);
+	vprint("Total Count - %d\n", count);
 	if (total == count) {
-		printf("Sum of sub grid counts matches total point count\n");
+		vprint("Sum of sub grid counts matches total point count\n");
 	}
 
 	// Declare arrays for each section of the grid and allocate memory depending
@@ -103,7 +118,7 @@ Grid *quadtree_grid(Point *points, int count,
 	// KERNEL Function to assign the points to its respective array
 	value = static_cast<float>(count) / threads_per_block;
 	range = max(1.0, ceil(value));
-	printf("%d: Organize in GPU: 1 block of %d threads each with range=%d\n",
+	vprint("%d: Organize in GPU: 1 block of %d threads each with range=%d\n",
 		   level, threads_per_block, range);
 	organize_points<<<grid2, block2, 4 * sizeof(int)>>>(
 		d_points, d_categories, bottom_left, bottom_right, top_left, top_right,
@@ -136,7 +151,7 @@ Grid *quadtree_grid(Point *points, int count,
 	cudaFree(top_left);
 	cudaFree(top_right);
 
-	printf("\n\n");
+	vprint("\n\n");
 
 	// Recursively call the quadtree grid function on each of the 4 sub grids -
 	// bl, br, tl, tr and store in Grid struct
