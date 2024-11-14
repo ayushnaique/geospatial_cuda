@@ -66,6 +66,8 @@ void quadtree_grid(Point *points, int count,
 	cudaMallocAsync(&d_categories, count * sizeof(int), stream);
 	cudaMallocAsync(&d_grid_counts, 4 * sizeof(int), stream);
 
+	cudaStreamSynchronize(stream);
+
 	// Copy the point data into device
 	cudaMemcpyAsync(d_points, points, count * sizeof(Point),
 					cudaMemcpyHostToDevice, stream);
@@ -84,7 +86,7 @@ void quadtree_grid(Point *points, int count,
 
 	// KERNEL Function to categorize points into 4 subgrids
 	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
-	printf("middle_x = %d, middle_y = %d \n", middle_x, middle_y);
+	printf("middle_x = %f, middle_y = %f \n", middle_x, middle_y);
 	categorize_points<<<grid, block, 4 * sizeof(int), stream>>>(
 		d_points, d_categories, d_grid_counts, count, range, middle_x,
 		middle_y);
@@ -114,6 +116,8 @@ void quadtree_grid(Point *points, int count,
 	cudaMallocAsync(&top_left, h_grid_counts[2] * sizeof(Point), stream);
 	cudaMallocAsync(&top_right, h_grid_counts[3] * sizeof(Point), stream);
 
+	cudaStreamSynchronize(stream);
+
 	dim3 grid2(1, 1, 1);
 	dim3 block2(threads_per_block, 1, 1);
 
@@ -124,7 +128,7 @@ void quadtree_grid(Point *points, int count,
 		   threads_per_block, range);
 	organize_points<<<grid2, block2, 4 * sizeof(int), stream>>>(
 		d_points, d_categories, bottom_left, bottom_right, top_left, top_right,
-		count, count / threads_per_block);
+		count, range);
 
 	// Declare the final array in which we store the sorted points according to
 	// the location in the grid
@@ -145,17 +149,17 @@ void quadtree_grid(Point *points, int count,
 					cudaMemcpyDeviceToHost, stream);
 
 	Grid *bottom_left_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, bl, mp(x1, y1),
-				 mp(middle_x, middle_y), h_grid_counts[0]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, bl,
+				 mp(middle_x, middle_y),  mp(x1, y1), h_grid_counts[0]);
 	Grid *bottom_right_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, br, mp(middle_x, y1),
-				 mp(x2, middle_y), h_grid_counts[1]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, br,
+				 mp(x2, middle_y), mp(middle_x, y1), h_grid_counts[1]);
 	Grid *top_left_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, tl, mp(x1, middle_y),
-				 mp(middle_x, y2), h_grid_counts[2]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, tl,
+				 mp(middle_x, y2), mp(x1, middle_y), h_grid_counts[2]);
 	Grid *top_right_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, tr, mp(middle_x, middle_y),
-				 mp(x2, y2), h_grid_counts[3]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, tr,
+				 mp(x2, y2), mp(middle_x, middle_y), h_grid_counts[3]);
 
 	grid_q->push(bottom_left_grid);
 	grid_q->push(bottom_right_grid);
@@ -189,8 +193,8 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 	Grid *current_grid;
 
 	queue<Grid *> recursive_grids;
-	Grid *root_grid = new Grid(nullptr, nullptr, nullptr, nullptr, points, bl,
-							   tr, point_count);
+	Grid *root_grid = new Grid(nullptr, nullptr, nullptr, nullptr, points, tr,
+							   bl, point_count);
 	recursive_grids.push(root_grid);
 
 	quadtree_grid(points, point_count, bl, tr, nullptr, grid_q);
@@ -216,12 +220,12 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 			Grid *popped_grid = grid_q->front();
 			grid_q->pop();
 
-			if (current_grid != nullptr && popped_grid) {
+			if (current_grid != nullptr && popped_grid != nullptr) {
 				addGrid(current_grid, popped_grid, i);
 				recursive_grids.push(popped_grid);
 			}
 
-			int x1 = popped_grid->bottom_left_corner.fi,
+			float x1 = popped_grid->bottom_left_corner.fi,
 				y1 = popped_grid->bottom_left_corner.se,
 				x2 = popped_grid->top_right_corner.fi,
 				y2 = popped_grid->top_right_corner.se;
@@ -235,11 +239,6 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 							  popped_grid->top_right_corner, streams[i],
 							  grid_q);
 			}
-		}
-
-		int size = current_grid->count;
-		for(int i = size - 1; i>=max(0, size - 10); i--){
-			printf("%f %f\n", current_grid->points[i].x, current_grid->points[i].y);
 		}
 
 		cudaDeviceSynchronize();
@@ -259,10 +258,10 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 }
 
 int main(int argc, char *argv[]) {
-	int initial_bl_fi;
-	int initial_bl_se;
-	int initial_tr_fi;
-	int initial_tr_se;
+	float initial_bl_fi;
+	float initial_bl_se;
+	float initial_tr_fi;
+	float initial_tr_se;
 
 	if (argc != 5) {
 		fprintf(stderr,
@@ -277,10 +276,10 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	initial_bl_fi = (unsigned int)atoi(argv[1]);
-	initial_bl_se = (unsigned int)atoi(argv[2]);
-	initial_tr_fi = (unsigned int)atoi(argv[3]);
-	initial_tr_se = (unsigned int)atoi(argv[4]);
+	initial_bl_fi = atof(argv[1]);
+	initial_bl_se = atof(argv[2]);
+	initial_tr_fi = atof(argv[3]);
+	initial_tr_se = atof(argv[4]);
 
 	string filename = "../points.txt";
 	vector<Point> points;
@@ -293,7 +292,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	string line;
-	int x, y;
+	float x, y;
 
 	while (getline(file, line)) {
 		istringstream iss(line);
