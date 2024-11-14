@@ -132,5 +132,6 @@ Temporary Items
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 points.txt
 create_grid
+create_grid_managed
 create_grid_with_stream
 quadtree
