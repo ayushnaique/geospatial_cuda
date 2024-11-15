@@ -37,23 +37,17 @@ Grid *quadtree_grid(Point *points, int count,
 	vprint("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
 		   x1, y1, x2, y2, count);
 
-	// Array of points for the geospatial data
+	// Array of points for the geospatial data using unified memory
 	Point *d_points;
+	cudaMallocManaged(&d_points, count * sizeof(Point));
 
-	// array to store the category of points (size = count) and the count of
-	// points in each grid (size = 4)
+	// Copy the input points to the unified memory
+	memcpy(d_points, points, count * sizeof(Point));
+
+	// Arrays for categories and grid counts using unified memory
 	int *d_categories, *d_grid_counts;
-
-	// Declare vectors to store the final values.
-	vector<int> h_grid_counts(4);
-
-	// Allocate memory to the pointers
-	cudaMalloc(&d_points, count * sizeof(Point));
-	cudaMalloc(&d_categories, count * sizeof(int));
-	cudaMalloc(&d_grid_counts, 4 * sizeof(int));
-
-	// Copy the point data into device
-	cudaMemcpy(d_points, points, count * sizeof(Point), cudaMemcpyHostToDevice);
+	cudaMallocManaged(&d_categories, count * sizeof(int));
+	cudaMallocManaged(&d_grid_counts, 4 * sizeof(int));
 
 	// Set the number of blocks and threads per block
 	int range, num_blocks, threads_per_block = MAX_THREADS_PER_BLOCK;
@@ -81,28 +75,27 @@ Grid *quadtree_grid(Point *points, int count,
 		d_points, d_categories, d_grid_counts, count, range, middle_x,
 		middle_y);
 
-	// Get back the data from device to host
-	cudaMemcpy(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
-			   cudaMemcpyDeviceToHost);
+	// Synchronize to ensure kernel completion
+	cudaDeviceSynchronize();
 
+	// No need for explicit memcpy as the data is already accessible
 	int total = 0;
 	vprint("%d: Point counts per sub grid - \n", level);
 	for (int i = 0; i < 4; i++) {
-		vprint("sub grid %d - %d\n", i + 1, h_grid_counts[i]);
-		total += h_grid_counts[i];
+		vprint("sub grid %d - %d\n", i + 1, d_grid_counts[i]);
+		total += d_grid_counts[i];
 	}
 	vprint("Total Count - %d\n", count);
 	if (total == count) {
 		vprint("Sum of sub grid counts matches total point count\n");
 	}
 
-	// Declare arrays for each section of the grid and allocate memory depending
-	// on the number of points found
+	// Declare arrays for each section of the grid using unified memory
 	Point *bottom_left, *bottom_right, *top_left, *top_right;
-	cudaMalloc(&bottom_left, h_grid_counts[0] * sizeof(Point));
-	cudaMalloc(&bottom_right, h_grid_counts[1] * sizeof(Point));
-	cudaMalloc(&top_left, h_grid_counts[2] * sizeof(Point));
-	cudaMalloc(&top_right, h_grid_counts[3] * sizeof(Point));
+	cudaMallocManaged(&bottom_left, d_grid_counts[0] * sizeof(Point));
+	cudaMallocManaged(&bottom_right, d_grid_counts[1] * sizeof(Point));
+	cudaMallocManaged(&top_left, d_grid_counts[2] * sizeof(Point));
+	cudaMallocManaged(&top_right, d_grid_counts[3] * sizeof(Point));
 
 	// KERNEL Function to assign the points to its respective array
 	value = static_cast<float>(count) / threads_per_block;
@@ -113,49 +106,29 @@ Grid *quadtree_grid(Point *points, int count,
 		d_points, d_categories, bottom_left, bottom_right, top_left, top_right,
 		count, range);
 
-	// Declare the final array in which we store the sorted points according to
-	// the location in the grid
-	Point *bl, *br, *tl, *tr;
-	bl = (Point *)malloc(h_grid_counts[0] * sizeof(Point));
-	br = (Point *)malloc(h_grid_counts[1] * sizeof(Point));
-	tl = (Point *)malloc(h_grid_counts[2] * sizeof(Point));
-	tr = (Point *)malloc(h_grid_counts[3] * sizeof(Point));
+	Grid *new_grid = new Grid(nullptr, nullptr, nullptr, nullptr, points,
+							  top_right_corner, bottom_left_corner, count);
 
-	// Shift the data from device to host
-	cudaMemcpy(bl, bottom_left, h_grid_counts[0] * sizeof(Point),
-			   cudaMemcpyDeviceToHost);
-	cudaMemcpy(br, bottom_right, h_grid_counts[1] * sizeof(Point),
-			   cudaMemcpyDeviceToHost);
-	cudaMemcpy(tl, top_left, h_grid_counts[2] * sizeof(Point),
-			   cudaMemcpyDeviceToHost);
-	cudaMemcpy(tr, top_right, h_grid_counts[3] * sizeof(Point),
-			   cudaMemcpyDeviceToHost);
-
-	// Free data
-	cudaFree(d_points);
+	// Synchronize to ensure kernel completion
+	cudaDeviceSynchronize();
 	cudaFree(d_categories);
-	cudaFree(d_grid_counts);
-	cudaFree(bottom_left);
-	cudaFree(bottom_right);
-	cudaFree(top_left);
-	cudaFree(top_right);
 
-	vprint("\n\n");
+	// Call recursive quadtree grid function directly with unified memory
+	// pointers
+	new_grid->bottom_left =
+		quadtree_grid(bottom_left, d_grid_counts[0], bottom_left_corner,
+					  mp(middle_x, middle_y), level + 1);
+	new_grid->bottom_right =
+		quadtree_grid(bottom_right, d_grid_counts[1], mp(middle_x, y1),
+					  mp(x2, middle_y), level + 1);
+	new_grid->top_left =
+		quadtree_grid(top_left, d_grid_counts[2], mp(x1, middle_y),
+					  mp(middle_x, y2), level + 1);
+	new_grid->top_right =
+		quadtree_grid(top_right, d_grid_counts[3], mp(middle_x, middle_y),
+					  top_right_corner, level + 1);
 
-	// Recursively call the quadtree grid function on each of the 4 sub grids -
-	// bl, br, tl, tr and store in Grid struct
-	Grid *bl_grid, *tl_grid, *br_grid, *tr_grid;
-	bl_grid = quadtree_grid(bl, h_grid_counts[0], bottom_left_corner,
-							mp(middle_x, middle_y), level + 1);
-	br_grid = quadtree_grid(br, h_grid_counts[1], mp(middle_x, y1),
-							mp(x2, middle_y), level + 1);
-	tl_grid = quadtree_grid(tl, h_grid_counts[2], mp(x1, middle_y),
-							mp(middle_x, y2), level + 1);
-	tr_grid = quadtree_grid(tr, h_grid_counts[3], mp(middle_x, middle_y),
-							top_right_corner, level + 1);
-
-	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, points,
-					top_right_corner, bottom_left_corner, count);
+	return new_grid;
 }
 
 int main(int argc, char *argv[]) {

@@ -16,6 +16,12 @@ using namespace std;
 #define se second
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
+#define MAX_THREADS_PER_BLOCK 512
+#define VERBOSE false
+#define vprint(s...) \
+	if (VERBOSE) {   \
+		printf(s);   \
+	}
 
 void addGrid(Grid *current_grid, Grid *quad_grid, int i) {
 	switch (i) {
@@ -46,7 +52,7 @@ void quadtree_grid(Point *points, int count,
 	// subdivide points into quadrants only if we have enough points to split
 	if (count < MIN_POINTS or
 		(abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
-		printf("exit condition reached \n");
+		vprint("exit condition reached \n");
 		return;
 	}
 
@@ -58,7 +64,6 @@ void quadtree_grid(Point *points, int count,
 	int *d_categories, *d_grid_counts;
 
 	// Declare vectors to store the final values.
-	vector<int> h_categories(count);
 	vector<int> h_grid_counts(4);
 
 	// Allocate memory to the pointers
@@ -71,40 +76,44 @@ void quadtree_grid(Point *points, int count,
 					cudaMemcpyHostToDevice, stream);
 
 	// Set the number of blocks and threads per block
-	int range, num_blocks = 16, threads_per_block = 256;
+	int range, num_blocks, threads_per_block = MAX_THREADS_PER_BLOCK;
+	if (count <= MAX_THREADS_PER_BLOCK) {
+		float warps = static_cast<float>(count) / 32;
+		threads_per_block = ceil(warps) * 32;
+		num_blocks = 1;
+	} else {
+		float blocks = static_cast<float>(count) / MAX_THREADS_PER_BLOCK;
+		num_blocks = min(32.0, ceil(blocks));
+	}
 
 	// Calculate the work done by each thread
 	float value = static_cast<float>(count) / (num_blocks * threads_per_block);
 	range = max(1.0, ceil(value));
-	printf("Categorize in GPU: %d blocks of %d threads each with range=%d\n",
+	vprint("Categorize in GPU: %d blocks of %d threads each with range=%d\n",
 		   num_blocks, threads_per_block, range);
-
-	dim3 grid(num_blocks, 1, 1);
-	dim3 block(threads_per_block, 1, 1);
 
 	// KERNEL Function to categorize points into 4 subgrids
 	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
-	printf("middle_x = %d, middle_y = %d \n", middle_x, middle_y);
-	categorize_points<<<grid, block, 4 * sizeof(int), stream>>>(
-		d_points, d_categories, d_grid_counts, count, range, middle_x,
-		middle_y);
+	vprint("middle_x = %f, middle_y = %f \n", middle_x, middle_y);
+	categorize_points<<<num_blocks, threads_per_block, 4 * sizeof(int),
+						stream>>>(d_points, d_categories, d_grid_counts, count,
+								  range, middle_x, middle_y);
 
 	// Get back the data from device to host
-	cudaMemcpyAsync(h_categories.data(), d_categories, count * sizeof(int),
-					cudaMemcpyDeviceToHost, stream);
 	cudaMemcpyAsync(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
 					cudaMemcpyDeviceToHost, stream);
 
-	int total = 0;
-	// printf("%d: Point counts per sub grid - \n", level);
-	for (int i = 0; i < 4; i++) {
-		printf("sub grid %d - %d\n", i + 1, h_grid_counts[i]);
-		total += h_grid_counts[i];
-	}
-	printf("Total Count - %d\n", count);
-	if (total == count) {
-		printf("Sum of sub grid counts matches total point count\n");
-	}
+	//// Print statements for grid level counts
+	// cudaStreamSynchronize(stream);
+	// int total = 0;
+	// for (int i = 0; i < 4; i++) {
+	// vprint("sub grid %d - %d\n", i + 1, h_grid_counts[i]);
+	// total += h_grid_counts[i];
+	//}
+	// vprint("Total Count - %d\n", count);
+	// if (total == count) {
+	// vprint("Sum of sub grid counts matches total point count\n");
+	//}
 
 	// Declare arrays for each section of the grid and allocate memory depending
 	// on the number of points found
@@ -114,17 +123,16 @@ void quadtree_grid(Point *points, int count,
 	cudaMallocAsync(&top_left, h_grid_counts[2] * sizeof(Point), stream);
 	cudaMallocAsync(&top_right, h_grid_counts[3] * sizeof(Point), stream);
 
-	dim3 grid2(1, 1, 1);
-	dim3 block2(threads_per_block, 1, 1);
-
 	// KERNEL Function to assign the points to its respective array
 	value = static_cast<float>(count) / threads_per_block;
 	range = max(1.0, ceil(value));
-	printf("Organize in GPU: 1 block of %d threads each with range=%d\n",
+	vprint("Organize in GPU: 1 block of %d threads each with range=%d\n",
 		   threads_per_block, range);
-	organize_points<<<grid2, block2, 4 * sizeof(int), stream>>>(
+	organize_points<<<1, threads_per_block, 4 * sizeof(int), stream>>>(
 		d_points, d_categories, bottom_left, bottom_right, top_left, top_right,
-		count, count / threads_per_block);
+		count, range);
+
+	cudaStreamSynchronize(stream);
 
 	// Declare the final array in which we store the sorted points according to
 	// the location in the grid
@@ -144,18 +152,20 @@ void quadtree_grid(Point *points, int count,
 	cudaMemcpyAsync(tr, top_right, h_grid_counts[3] * sizeof(Point),
 					cudaMemcpyDeviceToHost, stream);
 
+	cudaStreamSynchronize(stream);
+
 	Grid *bottom_left_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, bl, mp(x1, y1),
-				 mp(middle_x, middle_y), h_grid_counts[0]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, bl, mp(middle_x, middle_y),
+				 mp(x1, y1), h_grid_counts[0]);
 	Grid *bottom_right_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, br, mp(middle_x, y1),
-				 mp(x2, middle_y), h_grid_counts[1]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, br, mp(x2, middle_y),
+				 mp(middle_x, y1), h_grid_counts[1]);
 	Grid *top_left_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, tl, mp(x1, middle_y),
-				 mp(middle_x, y2), h_grid_counts[2]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, tl, mp(middle_x, y2),
+				 mp(x1, middle_y), h_grid_counts[2]);
 	Grid *top_right_grid =
-		new Grid(nullptr, nullptr, nullptr, nullptr, tr, mp(middle_x, middle_y),
-				 mp(x2, y2), h_grid_counts[3]);
+		new Grid(nullptr, nullptr, nullptr, nullptr, tr, mp(x2, y2),
+				 mp(middle_x, middle_y), h_grid_counts[3]);
 
 	grid_q->push(bottom_left_grid);
 	grid_q->push(bottom_right_grid);
@@ -170,8 +180,6 @@ void quadtree_grid(Point *points, int count,
 	cudaFreeAsync(bottom_right, stream);
 	cudaFreeAsync(top_left, stream);
 	cudaFreeAsync(top_right, stream);
-
-	cudaStreamSynchronize(stream);
 
 	return;
 }
@@ -189,8 +197,8 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 	Grid *current_grid;
 
 	queue<Grid *> recursive_grids;
-	Grid *root_grid = new Grid(nullptr, nullptr, nullptr, nullptr, points, bl,
-							   tr, point_count);
+	Grid *root_grid = new Grid(nullptr, nullptr, nullptr, nullptr, points, tr,
+							   bl, point_count);
 	recursive_grids.push(root_grid);
 
 	quadtree_grid(points, point_count, bl, tr, nullptr, grid_q);
@@ -216,20 +224,20 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 			Grid *popped_grid = grid_q->front();
 			grid_q->pop();
 
-			if (current_grid != nullptr && popped_grid) {
+			if (current_grid != nullptr && popped_grid != nullptr) {
 				addGrid(current_grid, popped_grid, i);
 				recursive_grids.push(popped_grid);
 			}
 
-			int x1 = popped_grid->bottom_left_corner.fi,
-				y1 = popped_grid->bottom_left_corner.se,
-				x2 = popped_grid->top_right_corner.fi,
-				y2 = popped_grid->top_right_corner.se;
+			float x1 = popped_grid->bottom_left_corner.fi,
+				  y1 = popped_grid->bottom_left_corner.se,
+				  x2 = popped_grid->top_right_corner.fi,
+				  y2 = popped_grid->top_right_corner.se;
 			if (!(popped_grid->count < MIN_POINTS or
 				  (abs(x1 - x2) < MIN_DISTANCE and
 				   abs(y1 - y2) < MIN_DISTANCE))) {
 				cudaStreamCreate(&(streams[i]));
-				printf("Stream %d created \n", i);
+				vprint("Stream %d created \n", i);
 				quadtree_grid(popped_grid->points, popped_grid->count,
 							  popped_grid->bottom_left_corner,
 							  popped_grid->top_right_corner, streams[i],
@@ -241,6 +249,7 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 
 		for (int i = 0; i < batch; i++) {
 			if (streams[i] != nullptr) {
+				cudaStreamSynchronize(streams[i]);
 				cudaStreamDestroy(streams[i]);
 			}
 		}
@@ -254,10 +263,10 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 }
 
 int main(int argc, char *argv[]) {
-	int initial_bl_fi;
-	int initial_bl_se;
-	int initial_tr_fi;
-	int initial_tr_se;
+	float initial_bl_fi;
+	float initial_bl_se;
+	float initial_tr_fi;
+	float initial_tr_se;
 
 	if (argc != 5) {
 		fprintf(stderr,
@@ -272,10 +281,10 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	initial_bl_fi = (unsigned int)atoi(argv[1]);
-	initial_bl_se = (unsigned int)atoi(argv[2]);
-	initial_tr_fi = (unsigned int)atoi(argv[3]);
-	initial_tr_se = (unsigned int)atoi(argv[4]);
+	initial_bl_fi = atof(argv[1]);
+	initial_bl_se = atof(argv[2]);
+	initial_tr_fi = atof(argv[3]);
+	initial_tr_se = atof(argv[4]);
 
 	string filename = "../points.txt";
 	vector<Point> points;
@@ -288,12 +297,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	string line;
-	int x, y;
+	float x, y;
 
 	while (getline(file, line)) {
 		istringstream iss(line);
 		if (iss >> x >> y) {
-			Point p = Point(x, y);
+			Point p = Point((float)x, (float)y);
 			points.emplace_back(p);
 			point_count++;
 		} else {
@@ -307,7 +316,11 @@ int main(int argc, char *argv[]) {
 	pair<float, float> root_tr = mp(initial_tr_fi, initial_tr_se);
 
 	queue<Grid *> grid_q;
-	Grid *root_grid = build_quadtree_levels(&points[0], point_count, &grid_q,
+	Point *points_array = (Point *)malloc(point_count * sizeof(Point));
+	for (int i = 0; i < point_count; i++) {
+		points_array[i] = points[i];
+	}
+	Grid *root_grid = build_quadtree_levels(points_array, point_count, &grid_q,
 											root_bl, root_tr);
 
 	printf("Validating grid...\n");

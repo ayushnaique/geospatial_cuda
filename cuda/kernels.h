@@ -47,5 +47,9 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 								Point *br, Point *tl, Point *tr, int count,
 								int range);
 
+__global__ void reorder_points(Point *d_points, Point *grid_points,
+							   int *grid_counts, int count, int range,
+							   float middle_x, float middle_y, int start_pos);
+
 bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 				   pair<float, float> &bottom_left_corner);
