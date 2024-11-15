@@ -416,7 +416,6 @@ int main(int argv, char* argc[]) {
     }
     // End the timer
     end = clock();
-<<<<<<< HEAD
 
     printf("Finished entering Points to the QuadTree\n");
     time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
@@ -462,53 +461,6 @@ int main(int argv, char* argc[]) {
 	else
 		printf("Grid Verification Failure!\n");
 
-=======
-
-    printf("Finished entering Points to the QuadTree\n");
-    time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
-	printf("Time taken for insertion of points = %lf\n\n", time_taken);
-
-    start = clock();
-    pair<float, float> point_to_search = make_pair(Coord[1027].first, Coord[1027].second);
-    Node* point = root -> search(point_to_search);
-    end = clock();
-
-    if(point != nullptr)
-        printf("coords associated with point 1028 in the QuadTree is %f, %f\n", point->NodePos.first, point->NodePos.second);
-    else    
-        printf("The node we are searching for has either been removed or does not exist!\n");
-    
-    time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
-	printf("Time taken for searching = %lf\n\n", time_taken);
-
-    start = clock();
-    root -> delete_point(new Node(point_to_search, 0));
-    end = clock();
-    printf("point deleted\n");
-
-    time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
-	printf("Time taken for deletion = %lf\n\n", time_taken);
-
-    start = clock();
-    point = root -> search(point_to_search);
-    end = clock();
-
-    if(point != nullptr)
-        printf("coords associated with point 1028 in the QuadTree is %f, %f\n", point->NodePos.first, point->NodePos.second);
-    else    
-        printf("The node we are searching for has either been removed or does not exist!\n");
-    
-    time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
-	printf("Time taken for searching = %lf\n\n", time_taken);
-
-	bool check = validate_grid(root, TopRight, BottomLeft);
-
-	if (check == true)
-		printf("Grid Verification Success!\n");
-	else
-		printf("Grid Verification Failure!\n");
-
->>>>>>> main
 
     return 0;
 }
