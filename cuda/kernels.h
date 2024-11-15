@@ -19,13 +19,15 @@ struct Grid {
 	// Number of points in the grid
 	int count;
 
+	int start_pos, grid_array_flag;
+
 	// Grid Dimension
 	std ::pair<float, float> top_right_corner;
 	std ::pair<float, float> bottom_left_corner;
 
 	// Initialize the corresponding Point values
 	Grid(Grid *bl, Grid *br, Grid *tl, Grid *tr, Point *ps,
-		 pair<float, float> uB, pair<float, float> lB, int c)
+		 pair<float, float> uB, pair<float, float> lB, int c, int sp, int gfl)
 		: bottom_left(bl),
 		  bottom_right(br),
 		  top_left(tl),
@@ -33,7 +35,9 @@ struct Grid {
 		  points(ps),
 		  top_right_corner(uB),
 		  bottom_left_corner(lB),
-		  count(c) {}
+		  count(c),
+		  start_pos(sp),
+		  grid_array_flag(gfl) {}
 };
 
 __inline__ __device__ int warpReduceSum(int value,

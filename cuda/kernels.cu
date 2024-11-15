@@ -149,10 +149,10 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 
 	// Iterate through all the points in d_points and count points in every
 	// category
-	int start = threadIdx.x * range, first = 0, second = 0, third = 0,
-		fourth = 0, category;
+	int start = start_pos + threadIdx.x * range, first = 0, second = 0,
+		third = 0, fourth = 0, category;
 	for (int i = start; i < start + range; i++) {
-		if (i < count) {
+		if (i < start_pos + count) {
 			// bottom left; if the point lies in bottom left, increment
 			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
 				first++;
@@ -200,7 +200,7 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	// find latest index for category and insert point into that index within
 	// grid_points
 	for (int i = start; i < start + range; i++) {
-		if (i < count) {
+		if (i < start_pos + count) {
 			// bottom left; if the point lies in bottom left, increment
 			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
 				category = 0;
