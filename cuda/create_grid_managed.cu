@@ -30,10 +30,8 @@ Grid *quadtree_grid(Point *points, int count,
 
 	if (count < MIN_POINTS or
 		(abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
-		pair<float, float> upper_bound = make_pair(x2, y2);
-		pair<float, float> lower_bound = make_pair(x1, y1);
-		return new Grid(nullptr, nullptr, nullptr, nullptr, points, upper_bound,
-						lower_bound, count);
+		return new Grid(nullptr, nullptr, nullptr, nullptr, points,
+						top_right_corner, bottom_left_corner, count);
 	}
 
 	vprint("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
@@ -108,12 +106,8 @@ Grid *quadtree_grid(Point *points, int count,
 		d_points, d_categories, bottom_left, bottom_right, top_left, top_right,
 		count, range);
 
-	// The bounds of the grid
-	pair<float, float> upper_bound = make_pair(x2, y2);
-	pair<float, float> lower_bound = make_pair(x1, y1);
-
 	Grid *new_grid = new Grid(nullptr, nullptr, nullptr, nullptr, points,
-							  upper_bound, lower_bound, count);
+							  top_right_corner, bottom_left_corner, count);
 
 	// Synchronize to ensure kernel completion
 	cudaDeviceSynchronize();

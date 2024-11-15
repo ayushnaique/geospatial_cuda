@@ -147,10 +147,12 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	}
 	__syncthreads();
 
-	int start = start_pos + threadIdx.x * range, first = 0, second = 0,
-		third = 0, fourth = 0, category;
+	// Iterate through all the points in d_points and count points in every
+	// category
+	int start = threadIdx.x * range, first = 0, second = 0, third = 0,
+		fourth = 0, category;
 	for (int i = start; i < start + range; i++) {
-		if (i < start_pos + count) {
+		if (i < count) {
 			// bottom left; if the point lies in bottom left, increment
 			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
 				first++;
@@ -185,6 +187,8 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	}
 	__syncthreads();
 
+	// Calculate the start position for every sub grid category and store in
+	// shared memory
 	if (threadIdx.x == 0) {
 		subgrid_offsets[4] = start_pos;
 		subgrid_offsets[5] = start_pos + subgrid_offsets[0];
@@ -192,8 +196,11 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 		subgrid_offsets[7] = subgrid_offsets[6] + subgrid_offsets[2];
 	}
 
+	// Iterate through every point in d_points and depending on the category,
+	// find latest index for category and insert point into that index within
+	// grid_points
 	for (int i = start; i < start + range; i++) {
-		if (i < start_pos + count) {
+		if (i < count) {
 			// bottom left; if the point lies in bottom left, increment
 			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
 				category = 0;
@@ -211,17 +218,18 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 				category = 3;
 			}
 
+			// atomic add at offset value and insert into grid_points
 			unsigned int index = atomicAdd(&subgrid_offsets[4 + category], 1);
 			grid_points[index] = d_points[i];
 		}
 	}
 
-	// Add the values of subgrid_counts to grid_counts
+	// Assign grid_counts as the counts of subgrids
 	if (threadIdx.x == 0) {
-		atomicAdd(&grid_counts[0], subgrid_offsets[0]);
-		atomicAdd(&grid_counts[1], subgrid_offsets[1]);
-		atomicAdd(&grid_counts[2], subgrid_offsets[2]);
-		atomicAdd(&grid_counts[3], subgrid_offsets[3]);
+		grid_counts[0] = subgrid_offsets[0];
+		grid_counts[1] = subgrid_offsets[1];
+		grid_counts[2] = subgrid_offsets[2];
+		grid_counts[3] = subgrid_offsets[3];
 	}
 }
 

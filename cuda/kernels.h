@@ -36,28 +36,6 @@ struct Grid {
 		  count(c) {}
 };
 
-// struct GridArray {
-// 	GridArray *bottom_left, *bottom_right, *top_left, *top_right;
-// 	int count, start, end;
-
-// 	// Grid Dimension
-// 	std ::pair<float, float> top_right_corner;
-// 	std ::pair<float, float> bottom_left_corner;
-
-// 	// Initialize the corresponding Point values
-// 	GridArray(GridArray *bl, GridArray *br, GridArray *tl, GridArray *tr,
-// 			  pair<float, float> uB, pair<float, float> lB, int c, int s, int e)
-// 		: bottom_left(bl),
-// 		  bottom_right(br),
-// 		  top_left(tl),
-// 		  top_right(tr),
-// 		  top_right_corner(uB),
-// 		  bottom_left_corner(lB),
-// 		  count(c),
-// 		  start(s),
-// 		  end(e) {}
-// };
-
 __inline__ __device__ int warpReduceSum(int value,
 										cg::thread_block_tile<32> warp);
 
@@ -71,8 +49,7 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 
 __global__ void reorder_points(Point *d_points, Point *grid_points,
 							   int *grid_counts, int count, int range,
-							   float middle_x, float middle_y, int start_pos,
-							   int end_pos);
+							   float middle_x, float middle_y, int start_pos);
 
 bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 				   pair<float, float> &bottom_left_corner);
