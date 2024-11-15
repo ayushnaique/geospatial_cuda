@@ -64,7 +64,6 @@ void quadtree_grid(Point *points, int count,
 	int *d_categories, *d_grid_counts;
 
 	// Declare vectors to store the final values.
-	vector<int> h_categories(count);
 	vector<int> h_grid_counts(4);
 
 	// Allocate memory to the pointers
@@ -101,8 +100,6 @@ void quadtree_grid(Point *points, int count,
 								  range, middle_x, middle_y);
 
 	// Get back the data from device to host
-	cudaMemcpyAsync(h_categories.data(), d_categories, count * sizeof(int),
-					cudaMemcpyDeviceToHost, stream);
 	cudaMemcpyAsync(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
 					cudaMemcpyDeviceToHost, stream);
 

@@ -7,6 +7,9 @@ grid: create_grid.cu kernels.cu
 grid_managed: create_grid_managed.cu kernels.cu
 	$(CC) -o create_grid_managed create_grid_managed.cu kernels.cu $(CFLAGS)
 
+grid_reorder: create_grid_reorder.cu kernels.cu
+	$(CC) -o create_grid_reorder create_grid_reorder.cu kernels.cu $(CFLAGS)
+
 grid_stream: create_grid_with_stream.cu kernels.cu
 	$(CC) -o create_grid_with_stream create_grid_with_stream.cu kernels.cu $(CFLAGS)
 
