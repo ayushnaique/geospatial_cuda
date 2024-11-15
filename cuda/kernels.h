@@ -19,15 +19,13 @@ struct Grid {
 	// Number of points in the grid
 	int count;
 
-	int start_pos, grid_array_flag;
-
 	// Grid Dimension
 	std ::pair<float, float> top_right_corner;
 	std ::pair<float, float> bottom_left_corner;
 
 	// Initialize the corresponding Point values
 	Grid(Grid *bl, Grid *br, Grid *tl, Grid *tr, Point *ps,
-		 pair<float, float> uB, pair<float, float> lB, int c, int sp, int gfl)
+		 pair<float, float> uB, pair<float, float> lB, int c)
 		: bottom_left(bl),
 		  bottom_right(br),
 		  top_left(tl),
@@ -35,9 +33,20 @@ struct Grid {
 		  points(ps),
 		  top_right_corner(uB),
 		  bottom_left_corner(lB),
-		  count(c),
+		  count(c) {}
+};
+
+struct Grid2 : public Grid {
+	int start_pos, grid_array_flag;
+
+	// Constructor for Grid2
+	Grid2(Grid2 *bl, Grid2 *br, Grid2 *tl, Grid2 *tr, Point *ps,
+		  pair<float, float> uB, pair<float, float> lB, int c, int sp, int gfl)
+		: Grid(bl, br, tl, tr, ps, uB, lB, c),	// Call base class constructor
 		  start_pos(sp),
 		  grid_array_flag(gfl) {}
+
+	// Additional methods for Grid2 can be added here
 };
 
 __inline__ __device__ int warpReduceSum(int value,
@@ -53,7 +62,7 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 
 __global__ void reorder_points(Point *d_points, Point *grid_points,
 							   int *grid_counts, int count, int range,
-							   float middle_x, float middle_y, int start_pos);
+							   float middle_x, float middle_y, int start_pos, bool opt);
 
 bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 				   pair<float, float> &bottom_left_corner);

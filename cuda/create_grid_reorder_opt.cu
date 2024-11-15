@@ -22,19 +22,19 @@ using namespace std;
 		printf(s);   \
 	}
 
-Grid *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1, int count,
-					pair<float, float> bottom_left_corner,
-					pair<float, float> top_right_corner, int start_pos,
-					int level, int grid_array_flag) {
+Grid2 *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1, int count,
+					 pair<float, float> bottom_left_corner,
+					 pair<float, float> top_right_corner, int start_pos,
+					 int level, int grid_array_flag) {
 	float x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
 		  x2 = top_right_corner.fi, y2 = top_right_corner.se;
 
 	// Exit condition for recursion
 	if (count < MIN_POINTS or
 		(abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
-		return new Grid(nullptr, nullptr, nullptr, nullptr, nullptr,
-						top_right_corner, bottom_left_corner, count, start_pos,
-						grid_array_flag);
+		return new Grid2(nullptr, nullptr, nullptr, nullptr, nullptr,
+						 top_right_corner, bottom_left_corner, count, start_pos,
+						 grid_array_flag);
 	}
 
 	vprint(
@@ -60,7 +60,7 @@ Grid *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1, int count,
 		   level, MAX_THREADS_PER_BLOCK, range);
 	reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
 		d_grid_points0, d_grid_points1, d_grid_counts, count, range, middle_x,
-		middle_y, start_pos);
+		middle_y, start_pos, true);
 
 	// Write the sub grid counts back to host
 	cudaMemcpy(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
@@ -85,10 +85,13 @@ Grid *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1, int count,
 		tr_start_pos =
 			start_pos + h_grid_counts[0] + h_grid_counts[1] + h_grid_counts[2];
 
-	vprint("\n\n");
+	vprint(
+		"%d: Completed grid from (%f,%f) to (%f,%f) for %d points with "
+		"start_pos=%d\n\n",
+		level, x1, y1, x2, y2, count, start_pos);
 
 	// Recursively call the quadtree grid function on each of the 4 sub grids
-	Grid *bl_grid, *tl_grid, *br_grid, *tr_grid;
+	Grid2 *bl_grid, *tl_grid, *br_grid, *tr_grid;
 	bl_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[0],
 							bottom_left_corner, mp(middle_x, middle_y),
 							start_pos, level + 1, grid_array_flag ^ 1);
@@ -102,14 +105,9 @@ Grid *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1, int count,
 							mp(middle_x, middle_y), top_right_corner,
 							tr_start_pos, level + 1, grid_array_flag ^ 1);
 
-	vprint(
-		"%d: Completed grid from (%f,%f) to (%f,%f) for %d points with "
-		"start_pos=%d\n",
-		level, x1, y1, x2, y2, count, start_pos);
-
-	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, nullptr,
-					top_right_corner, bottom_left_corner, count, start_pos,
-					grid_array_flag);
+	return new Grid2(bl_grid, br_grid, tl_grid, tr_grid, nullptr,
+					 top_right_corner, bottom_left_corner, count, start_pos,
+					 grid_array_flag);
 }
 
 int main(int argc, char *argv[]) {
@@ -162,7 +160,7 @@ int main(int argc, char *argv[]) {
 			   cudaMemcpyHostToDevice);
 
 	start = clock();
-	Grid *root_grid =
+	Grid2 *root_grid =
 		quadtree_grid(d_grid_points0, d_grid_points1, point_count, mp(0.0, 0.0),
 					  mp(max_size, max_size), 0, 0, 0);
 	end = clock();
@@ -181,15 +179,15 @@ int main(int argc, char *argv[]) {
 	time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
 	printf("Time taken = %lf\n\n", time_taken);
 
-	printf("Validating grid...\n");
-	pair<float, float> lower_bound = make_pair(0.0, 0.0);
-	pair<float, float> upper_bound = make_pair(max_size, max_size);
-	bool check = validate_grid(root_grid, upper_bound, lower_bound);
+     printf("Validating grid...\n");
+     pair<float, float> lower_bound = make_pair(0.0, 0.0);
+     pair<float, float> upper_bound = make_pair(max_size, max_size);
+     bool check = validate_grid(root_grid, upper_bound, lower_bound);
 
-	if (check == true)
-		printf("Grid Verification Success!\n");
-	else
-		printf("Grid Verification Failure!\n");
+     if (check == true)
+     printf("Grid Verification Success!\n");
+     else
+     printf("Grid Verification Failure!\n");
 
 	return 0;
 }

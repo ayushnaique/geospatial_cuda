@@ -129,7 +129,7 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 
 __global__ void reorder_points(Point *d_points, Point *grid_points,
 							   int *grid_counts, int count, int range,
-							   float middle_x, float middle_y, int start_pos) {
+							   float middle_x, float middle_y, int start_pos, bool opt) {
 	// subgrid_counts declared outside kernel, Dynamic Shared Memory
 	// Accessed using extern
 	extern __shared__ int subgrid_offsets[];
@@ -149,10 +149,14 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 
 	// Iterate through all the points in d_points and count points in every
 	// category
-	int start = start_pos + threadIdx.x * range, first = 0, second = 0,
+	int start = threadIdx.x * range, end = count, first = 0, second = 0,
 		third = 0, fourth = 0, category;
+    if(opt) {
+        start += start_pos;
+        end += start_pos;
+    }
 	for (int i = start; i < start + range; i++) {
-		if (i < start_pos + count) {
+		if (i < end) {
 			// bottom left; if the point lies in bottom left, increment
 			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
 				first++;
@@ -200,7 +204,7 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	// find latest index for category and insert point into that index within
 	// grid_points
 	for (int i = start; i < start + range; i++) {
-		if (i < start_pos + count) {
+		if (i < end) {
 			// bottom left; if the point lies in bottom left, increment
 			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
 				category = 0;

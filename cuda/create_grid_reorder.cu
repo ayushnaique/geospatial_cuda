@@ -63,7 +63,7 @@ Grid *quadtree_grid(Point *points, Point *d_grid_points, int count,
 		   level, MAX_THREADS_PER_BLOCK, range);
 	reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
 		d_points, d_grid_points, d_grid_counts, count, range, middle_x,
-		middle_y, start_pos);
+		middle_y, start_pos, false);
 
 	// Write the sub grid counts back to host
 	cudaMemcpy(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
@@ -106,7 +106,10 @@ Grid *quadtree_grid(Point *points, Point *d_grid_points, int count,
 	cudaFree(d_points);
 	cudaFree(d_grid_counts);
 
-	vprint("\n\n");
+	vprint(
+		"%d: Completed grid from (%f,%f) to (%f,%f) for %d points with "
+		"start_pos=%d\n\n",
+		level, x1, y1, x2, y2, count, start_pos);
 
 	// Recursively call the quadtree grid function on each of the 4 sub grids -
 	// bl, br, tl, tr and store in Grid struct
@@ -123,11 +126,6 @@ Grid *quadtree_grid(Point *points, Point *d_grid_points, int count,
 	tr_grid = quadtree_grid(tr, d_grid_points, h_grid_counts[3],
 							mp(middle_x, middle_y), top_right_corner,
 							tr_start_pos, level + 1);
-
-	vprint(
-		"%d: Completed grid from (%f,%f) to (%f,%f) for %d points with "
-		"start_pos=%d\n",
-		level, x1, y1, x2, y2, count, start_pos);
 
 	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, points,
 					top_right_corner, bottom_left_corner, count);
