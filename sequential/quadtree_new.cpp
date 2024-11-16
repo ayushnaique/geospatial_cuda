@@ -174,7 +174,7 @@ Grid* quadtree_grid(Point *points, int count,
 	bl_grid = quadtree_grid(bottom_left, grid_counts[0], bottom_left_corner,
 							mp(middle_x, middle_y), level + 1);
 	br_grid = quadtree_grid(bottom_right, grid_counts[1], mp(middle_x, y1),
-							mp(x1, middle_y), level + 1);
+							mp(x2, middle_y), level + 1);
 	tl_grid = quadtree_grid(top_left, grid_counts[2], mp(x1, middle_y),
 							mp(middle_x, y2), level + 1);
 	tr_grid = quadtree_grid(top_right, grid_counts[3], mp(middle_x, middle_y),
