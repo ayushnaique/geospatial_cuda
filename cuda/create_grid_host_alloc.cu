@@ -7,7 +7,7 @@
 #include <sstream>
 #include <vector>
 
-#include "kernels_new.h"
+#include "kernels.h"
 using namespace std;
 
 #define mp make_pair
@@ -16,7 +16,7 @@ using namespace std;
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
 #define MAX_THREADS_PER_BLOCK 512
-#define VERBOSE false
+#define VERBOSE true
 #define vprint(s...) \
 	if (VERBOSE) {   \
 		printf(s);   \
@@ -50,7 +50,7 @@ Grid* quadtree_grid(Point* d_grid_points, Point* d_points_array, int start, int 
 	int range = max(1.0, ceil(value));
 	vprint("%d: Reorder in GPU: 1 block of %d threads each with range=%d\n",
 		   level, MAX_THREADS_PER_BLOCK, range);
-	reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(d_points_array, d_grid_points, count, range, middle_x, middle_y, start, d_grid_count);
+	reorder_points_h_alloc<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(d_points_array, d_grid_points, count, range, middle_x, middle_y, start, d_grid_count);
 
 	cudaDeviceSynchronize();
 

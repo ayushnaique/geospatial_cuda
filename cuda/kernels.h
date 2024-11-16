@@ -9,6 +9,8 @@ using namespace std;
 struct Point {
 	float x, y;
 
+	Point() : x(), y() {}
+
 	Point(float xc, float yc) : x(xc), y(yc) {}
 };
 
@@ -50,6 +52,11 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 __global__ void reorder_points(Point *d_points, Point *grid_points,
 							   int *grid_counts, int count, int range,
 							   float middle_x, float middle_y, int start_pos);
+
+//implementation for host_alloc
+__global__ void reorder_points_h_alloc(Point* d_points_array, Point* d_grid_points, 
+							   int count, int range, float middle_x, float middle_y,
+							   int start_pos, int* d_grid_count);
 
 bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 				   pair<float, float> &bottom_left_corner);
