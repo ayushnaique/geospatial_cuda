@@ -145,11 +145,6 @@ int main(int argc, char *argv[]) {
 	double time_taken;
 	clock_t start, end;
 
-	// Point *points_array = (Point *)malloc(point_count * sizeof(Point));
-	// for (int i = 0; i < point_count; i++) {
-	// 	points_array[i] = points[i];
-	// }
-
 	// Store the d_grid_points array as points_array
 	Point *d_grid_points0, *d_grid_points1;
 	cudaMalloc(&d_grid_points0, point_count * sizeof(Point));
