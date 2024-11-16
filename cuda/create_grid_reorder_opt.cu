@@ -22,19 +22,19 @@ using namespace std;
 		printf(s);   \
 	}
 
-GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1, int count,
-					 pair<float, float> bottom_left_corner,
-					 pair<float, float> top_right_corner, int start_pos,
-					 int level, int grid_array_flag) {
+GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
+						 int count, pair<float, float> bottom_left_corner,
+						 pair<float, float> top_right_corner, int start_pos,
+						 int level, int grid_array_flag) {
 	float x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
 		  x2 = top_right_corner.fi, y2 = top_right_corner.se;
 
 	// Exit condition for recursion
 	if (count < MIN_POINTS or
 		(abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
-		return new GridArray(nullptr, nullptr, nullptr, nullptr, 
-						 top_right_corner, bottom_left_corner, count, start_pos,
-						 grid_array_flag);
+		return new GridArray(nullptr, nullptr, nullptr, nullptr,
+							 top_right_corner, bottom_left_corner, count,
+							 start_pos, grid_array_flag);
 	}
 
 	vprint(
@@ -105,9 +105,8 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1, int count
 							mp(middle_x, middle_y), top_right_corner,
 							tr_start_pos, level + 1, grid_array_flag ^ 1);
 
-	return new GridArray(bl_grid, br_grid, tl_grid, tr_grid, 
-					 top_right_corner, bottom_left_corner, count, start_pos,
-					 grid_array_flag);
+	return new GridArray(bl_grid, br_grid, tl_grid, tr_grid, top_right_corner,
+						 bottom_left_corner, count, start_pos, grid_array_flag);
 }
 
 int main(int argc, char *argv[]) {

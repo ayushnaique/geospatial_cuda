@@ -309,15 +309,16 @@ bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 		   check_bottom_right;
 }
 
-Grid* assign_points(GridArray *root_grid, Point *grid_array0, Point *grid_array1) {
+Grid *assign_points(GridArray *root_grid, Point *grid_array0,
+					Point *grid_array1) {
 	int count = root_grid->count, start_pos = root_grid->start_pos;
 	Point *points = (Point *)malloc(root_grid->count * sizeof(Point));
 	Point *grid_array = grid_array0;
-    if(root_grid->grid_array_flag) grid_array = grid_array1;
-	for (int i = start_pos; i < start_pos + count; i++) {
-		points[i] = grid_array[i];
+	if (root_grid->grid_array_flag) grid_array = grid_array1;
+	for (int i = 0; i < count; i++) {
+		points[i] = grid_array[start_pos + i];
 	}
-    Grid *bl = nullptr, *br = nullptr, *tl = nullptr, *tr = nullptr;
+	Grid *bl = nullptr, *br = nullptr, *tl = nullptr, *tr = nullptr;
 	if (root_grid->bottom_left)
 		bl = assign_points(root_grid->bottom_left, grid_array0, grid_array1);
 	if (root_grid->bottom_right)
@@ -327,6 +328,6 @@ Grid* assign_points(GridArray *root_grid, Point *grid_array0, Point *grid_array1
 	if (root_grid->top_right)
 		tr = assign_points(root_grid->top_right, grid_array0, grid_array1);
 
-    return new Grid(bl, br, tl, tr, points,
-                    root_grid->top_right_corner, root_grid->bottom_left_corner, count);
+	return new Grid(bl, br, tl, tr, points, root_grid->top_right_corner,
+					root_grid->bottom_left_corner, count);
 }
