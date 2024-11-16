@@ -422,12 +422,12 @@ int main(int argv, char* argc[]) {
 	printf("Time taken for insertion of points = %lf\n\n", time_taken);
 
     start = clock();
-    pair<float, float> point_to_search = make_pair(Coord[1027].first, Coord[1027].second);
+    pair<float, float> point_to_search = make_pair(Coord[9999999].first, Coord[9999999].second);
     Node* point = root -> search(point_to_search);
     end = clock();
 
     if(point != nullptr)
-        printf("coords associated with point 1028 in the QuadTree is %f, %f\n", point->NodePos.first, point->NodePos.second);
+        printf("coords associated with point 10000000 in the QuadTree is %f, %f\n", point->NodePos.first, point->NodePos.second);
     else    
         printf("The node we are searching for has either been removed or does not exist!\n");
     
@@ -447,7 +447,7 @@ int main(int argv, char* argc[]) {
     end = clock();
 
     if(point != nullptr)
-        printf("coords associated with point 1028 in the QuadTree is %f, %f\n", point->NodePos.first, point->NodePos.second);
+        printf("coords associated with point 10000000 in the QuadTree is %f, %f\n", point->NodePos.first, point->NodePos.second);
     else    
         printf("The node we are searching for has either been removed or does not exist!\n");
     

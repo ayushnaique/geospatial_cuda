@@ -10,7 +10,11 @@ def generate_random_points(filename, num_points, grid_size=(1e6, 1e6)):
 
 def main():
     # Approximate maximum points to keep file size under 1 GB
+<<<<<<< HEAD
+    max_points = 1e7
+=======
     max_points = 1e6
+>>>>>>> main
     filename = "points.txt"
     
     generate_random_points(filename, max_points)
