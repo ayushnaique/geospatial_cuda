@@ -19,5 +19,8 @@ grid_stream: create_grid_with_stream.cu kernels.cu
 grid_ayush: create_grid_new.cu kernels_new.cu
         $(CC) -o create_grid create_grid_new.cu kernels_new.cu $(CFLAGS)
 
+grid_host: create_grid_host_alloc.cu kernels.cu
+	$(CC) -o create_grid_host create_grid_host_alloc.cu kernels.cu $(CFLAGS)
+
 clean:
 	rm -f create_grid *~
