@@ -312,22 +312,42 @@ bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 Grid *assign_points(GridArray *root_grid, Point *grid_array0,
 					Point *grid_array1) {
 	int count = root_grid->count, start_pos = root_grid->start_pos;
-	Point *points = (Point *)malloc(root_grid->count * sizeof(Point));
-	Point *grid_array = grid_array0;
-	if (root_grid->grid_array_flag) grid_array = grid_array1;
-	for (int i = 0; i < count; i++) {
-		points[i] = grid_array[start_pos + i];
-	}
-	Grid *bl = nullptr, *br = nullptr, *tl = nullptr, *tr = nullptr;
-	if (root_grid->bottom_left)
-		bl = assign_points(root_grid->bottom_left, grid_array0, grid_array1);
-	if (root_grid->bottom_right)
-		br = assign_points(root_grid->bottom_right, grid_array0, grid_array1);
-	if (root_grid->top_left)
-		tl = assign_points(root_grid->top_left, grid_array0, grid_array1);
-	if (root_grid->top_right)
-		tr = assign_points(root_grid->top_right, grid_array0, grid_array1);
 
-	return new Grid(bl, br, tl, tr, points, root_grid->top_right_corner,
-					root_grid->bottom_left_corner, count);
+	 // Memory allocation for points
+    Point *points = (Point *)malloc(count * sizeof(Point));
+    if (!points) {
+        fprintf(stderr, "Failed to allocate memory for points!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Select grid_array based on flag
+    Point *grid_array = root_grid->grid_array_flag ? grid_array1 : grid_array0;
+
+    // Copy points
+    for (int i = 0; i < count; i++) {
+        if (start_pos + i >= count) {
+                printf("count=%d, start_pos=%d, i=%d", count, start_pos, i);
+            fprintf(stderr, "Invalid memory access in grid_array!\n");
+            free(points); // Clean up memory
+            exit(EXIT_FAILURE);
+        }
+        points[i] = grid_array[start_pos + i];
+    }
+
+    // Recursively assign points to sub-grids
+    Grid *bl = nullptr, *br = nullptr, *tl = nullptr, *tr = nullptr;
+
+    if (root_grid->bottom_left)
+        bl = assign_points(root_grid->bottom_left, grid_array0, grid_array1);
+    if (root_grid->bottom_right)
+        br = assign_points(root_grid->bottom_right, grid_array0, grid_array1);
+    if (root_grid->top_left)
+        tl = assign_points(root_grid->top_left, grid_array0, grid_array1);
+    if (root_grid->top_right)
+        tr = assign_points(root_grid->top_right, grid_array0, grid_array1);
+
+    // Create and return the new grid
+    return new Grid(bl, br, tl, tr, points, root_grid->top_right_corner,
+                    root_grid->bottom_left_corner, count);
+
 }
