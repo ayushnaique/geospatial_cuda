@@ -9,6 +9,8 @@ using namespace std;
 struct Point {
 	float x, y;
 
+	Point() : x(), y() {}
+
 	Point(float xc, float yc) : x(xc), y(yc) {}
 };
 
@@ -36,20 +38,6 @@ struct Grid {
 		  count(c) {}
 };
 
-__inline__ __device__ int warpReduceSum(int value,
-										cg::thread_block_tile<32> warp);
+__global__ void reorder_points(Point* d_points_array, Point* d_grid_points, int count, int range, float middle_x, float middle_y, int start_pos, int* d_grid_count);
 
-__global__ void categorize_points(Point *d_points, int *d_categories,
-								  int *grid_counts, int count, int range,
-								  float middle_x, float middle_y);
-
-__global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
-								Point *br, Point *tl, Point *tr, int count,
-								int range);
-
-__global__ void reorder_points(Point *d_points, Point *grid_points,
-							   int *grid_counts, int count, int range,
-							   float middle_x, float middle_y, int start_pos);
-
-bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
-				   pair<float, float> &bottom_left_corner);
+bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner, pair<float, float> &bottom_left_corner);
