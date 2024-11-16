@@ -16,7 +16,7 @@ using namespace std;
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
 #define MAX_THREADS_PER_BLOCK 512
-#define VERBOSE false
+#define VERBOSE true
 #define vprint(s...) \
     if (VERBOSE)     \
     {                \
@@ -49,13 +49,14 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
                                      int count, pair<float, float> bottom_left_corner,
                                      pair<float, float> top_right_corner, int start_pos,
                                      int grid_array_flag, cudaStream_t stream,
-                                     queue<GridArray *> *grid_q, int* h_grid_count, int* d_grid_count) {
+                                     queue<GridArray *> *grid_q, int* h_grid_count, int* d_grid_count, int d_start) {
+    // printf("streamid: %d\n", d_start);
     // unzip values for faster access
     float x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
           x2 = top_right_corner.fi, y2 = top_right_corner.se;
 
     // Exit condition for recursion
-    if (count < MIN_POINTS or
+    if (count < MIN_POINTS || 
         (abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
         return mp(d_grid_points0, d_grid_points1);
     }
@@ -73,18 +74,18 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
     int range = max(1.0, ceil(value));
     vprint("Reorder in GPU: 1 block of %d threads each with range=%d\n",
            MAX_THREADS_PER_BLOCK, range);
-    reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
+    reorder_points_h_alloc<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
         d_grid_points0, d_grid_points1, count, range, middle_x,
-        middle_y, start_pos, true, d_grid_point);
+        middle_y, start_pos, true, d_grid_count, d_start);
 
     cudaDeviceSynchronize();
 
     int total = 0;
     vprint("Point counts per sub grid - \n");
-    for (int i = 0; i < 4; i++)
+    for (int i = d_start * 4; i < (d_start + 1) * 4; i++)
     {
-        vprint("sub grid %d - %d\n", i + 1, h_grid_counts[i]);
-        total += h_grid_counts[i];
+        vprint("sub grid %d - %d\n", i + 1, h_grid_count[i]);
+        total += h_grid_count[i];
     }
     vprint("Total Count - %d\n", count);
     if (total == count)
@@ -93,17 +94,17 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
     }
 
     // Store the starting positions from d_grid_points for br, tl, tr
-    int br_start_pos = start_pos + h_grid_count[0],
-        tl_start_pos = start_pos + h_grid_count[0] + h_grid_count[1],
+    int br_start_pos = start_pos + h_grid_count[d_start * 4],
+        tl_start_pos = start_pos + h_grid_count[d_start * 4] + h_grid_count[d_start * 4 + 1],
         tr_start_pos =
-            start_pos + h_grid_count[0] + h_grid_count[1] + h_grid_count[2];
+            start_pos + h_grid_count[d_start * 4] + h_grid_count[d_start * 4 + 1] + h_grid_count[d_start * 4 + 2];
 
     vprint(
         "Completed grid from (%f,%f) to (%f,%f) for %d points with "
         "start_pos=%d\n\n",
         x1, y1, x2, y2, count, start_pos);
 
-	int g1 = h_grid_count[0], g2 = h_grid_count[1], g3 = h_grid_count[2], g4 = h_grid_count[3];
+	int g1 = h_grid_count[d_start * 4], g2 = h_grid_count[d_start * 4 + 1], g3 = h_grid_count[d_start * 4 + 2], g4 = h_grid_count[d_start * 4 + 3];
     
     // Recursively call the quadtree grid function on each of the 4 sub grids
     GridArray *bl_grid, *tl_grid, *br_grid, *tr_grid;
@@ -145,7 +146,6 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
                             queue<GridArray *> *grid_q, pair<float, float> bl,
                             pair<float, float> tr) {
     double time_taken;
-	clock_t start, end;
 
 	Point *points_array = (Point *)malloc(point_count * sizeof(Point));
 	for (int i = 0; i < point_count; i++) {
@@ -162,24 +162,24 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
 
     // Allocate page-locked memory (host memory)
     int* h_grid_count;
-    cudaHostAlloc(&h_grid_count, 4 * sizeof(int), cudaHostAllocMapped);
+    cudaHostAlloc(&h_grid_count, 16 * sizeof(int), cudaHostAllocMapped);
 
     // Allocate device memory (GPU memory)
     int* d_grid_count;
     cudaHostGetDevicePointer(&d_grid_count, h_grid_count, 0);
 
     // Initialize host array
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 16; i++) {
         h_grid_count[i] = 0;
     }
 
-	start = clock();
+	clock_t start = clock();
 
 	// Transfer point data to device
 	cudaMemcpy(d_grid_points0, points_array, point_count * sizeof(Point), cudaMemcpyHostToDevice);
 
     // current grid keeps changing depending on the stream
-    GridArray *current_grid;
+    GridArray *current_grid = nullptr;
 
     // Declare a queue that will store the grids in fifo order
     queue<GridArray*> recursive_grids;
@@ -205,47 +205,48 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
         We use this to sort the d_grid_points 
     */
     grid_ptrs_2d = quadtree_grid(d_grid_points0, d_grid_points1, point_count, bl,
-                                 tr, 0, 0, nullptr, grid_q);
+                                 tr, 0, 0, nullptr, grid_q, h_grid_count, d_grid_count, 0);
 
 
     // Loop until all the GridArrays in the queue are taken care of
     while(!grid_q -> empty()) {
-        for (int i = 0; i < maxStreams; ++i)
-        {   
-            // Check if there is a GridArray yet to be worked on
-            if (!grid_q->empty())
-            {
-                GridArray *popped_grid = grid_q->front();
-                grid_q->pop();
+        bool flg = false;
+        for (int i = 0; i < maxStreams; ++i) {   
+            // the front of recursive grid will have the root for the current subgrids
+            GridArray* root = nullptr;
+            if(!recursive_grids.empty()) {
+                root = recursive_grids.front();
+                flg = true;
+            }
+            
+            GridArray* sub_grid = nullptr;
+            if(!grid_q -> empty()) {
+                sub_grid = grid_q -> front();
+                grid_q -> pop();
+            }
 
-                if (!recursive_grids.empty())
-                {
-                    current_grid = recursive_grids.front();
-                    recursive_grids.pop();
-                }
+            if(sub_grid != nullptr && root != nullptr) {
+                addGrid(root_grid, sub_grid, i);
+                recursive_grids.push(sub_grid);
 
-                if (current_grid != nullptr && popped_grid != nullptr)
-                {
-                    addGrid(current_grid, popped_grid, i);
-                    recursive_grids.push(popped_grid);
-                }
+                float x1 = sub_grid->bottom_left_corner.fi,
+                      y1 = sub_grid->bottom_left_corner.se,
+                      x2 = sub_grid->top_right_corner.fi,
+                      y2 = sub_grid->top_right_corner.se;
 
-                float x1 = popped_grid->bottom_left_corner.fi,
-                      y1 = popped_grid->bottom_left_corner.se,
-                      x2 = popped_grid->top_right_corner.fi,
-                      y2 = popped_grid->top_right_corner.se;
-
-                if (!(popped_grid->count < MIN_POINTS ||
+                if (!(sub_grid->count < MIN_POINTS ||
                         (abs(x1 - x2) < MIN_DISTANCE && abs(y1 - y2) < MIN_DISTANCE)))
                 {
                     // Launch quadtree_grid asynchronously in the selected stream
-                    grid_ptrs_2d = quadtree_grid(grid_ptrs_2d.fi, grid_ptrs_2d.se, popped_grid->count,
-                                                    popped_grid->bottom_left_corner,
-                                                    popped_grid->top_right_corner, popped_grid->start_pos, popped_grid->grid_array_flag, streams[i],
-                                                    grid_q, h_grid_count, d_grid_count);
+                    grid_ptrs_2d = quadtree_grid(grid_ptrs_2d.fi, grid_ptrs_2d.se, sub_grid->count,
+                                                sub_grid->bottom_left_corner,
+                                                sub_grid->top_right_corner, sub_grid->start_pos, sub_grid->grid_array_flag, streams[i],
+                                                grid_q, h_grid_count, d_grid_count, i);
                 }
             }
-        }
+        }   
+        if(flg) 
+            recursive_grids.pop();
     }
 
     // Destroy streams after use
@@ -265,11 +266,12 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
     cudaFree(d_grid_points0);
     cudaFree(d_grid_points1);
 
-    end = clock();
+    clock_t end = clock();
     time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
     printf("Time taken = %lf\n", time_taken);
 
-    Grid *root = assign_points(root_grid, grid_array0, grid_array1);
+    printf("calling assign_points\n");
+    Grid *root = assign_points(recursive_grids.front(), grid_array0, grid_array1);
 
     return root;
 }

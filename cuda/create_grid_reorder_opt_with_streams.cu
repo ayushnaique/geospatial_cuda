@@ -16,7 +16,7 @@ using namespace std;
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
 #define MAX_THREADS_PER_BLOCK 512
-#define VERBOSE false
+#define VERBOSE true
 #define vprint(s...) \
     if (VERBOSE)     \
     {                \
@@ -82,7 +82,7 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
     int range = max(1.0, ceil(value));
     vprint("Reorder in GPU: 1 block of %d threads each with range=%d\n",
            MAX_THREADS_PER_BLOCK, range);
-    reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
+    reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int), stream>>>(
         d_grid_points0, d_grid_points1, d_grid_counts, count, range, middle_x,
         middle_y, start_pos, true);
 
@@ -120,7 +120,7 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
 
     // Recursively call the quadtree grid function on each of the 4 sub grids
     GridArray *bl_grid, *tl_grid, *br_grid, *tr_grid;
-    
+
     bl_grid =
         new GridArray(nullptr, nullptr, nullptr, nullptr,
                       mp(middle_x, middle_y), bottom_left_corner, h_grid_counts[0],
