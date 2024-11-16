@@ -129,7 +129,8 @@ __global__ void organize_points(Point *d_points, int *d_categories, Point *bl,
 
 __global__ void reorder_points(Point *d_points, Point *grid_points,
 							   int *grid_counts, int count, int range,
-							   float middle_x, float middle_y, int start_pos, bool opt) {
+							   float middle_x, float middle_y, int start_pos,
+							   bool opt) {
 	// subgrid_counts declared outside kernel, Dynamic Shared Memory
 	// Accessed using extern
 	extern __shared__ int subgrid_offsets[];
@@ -151,10 +152,10 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	// category
 	int start = threadIdx.x * range, end = count, first = 0, second = 0,
 		third = 0, fourth = 0, category;
-    if(opt) {
-        start += start_pos;
-        end += start_pos;
-    }
+	if (opt) {
+		start += start_pos;
+		end += start_pos;
+	}
 	for (int i = start; i < start + range; i++) {
 		if (i < end) {
 			// bottom left; if the point lies in bottom left, increment
@@ -306,4 +307,26 @@ bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 
 	return check_top_left && check_top_right && check_bottom_left &&
 		   check_bottom_right;
+}
+
+Grid* assign_points(GridArray *root_grid, Point *grid_array0, Point *grid_array1) {
+	int count = root_grid->count, start_pos = root_grid->start_pos;
+	Point *points = (Point *)malloc(root_grid->count * sizeof(Point));
+	Point *grid_array = grid_array0;
+    if(root_grid->grid_array_flag) grid_array = grid_array1;
+	for (int i = start_pos; i < start_pos + count; i++) {
+		points[i] = grid_array[i];
+	}
+    Grid *bl = nullptr, *br = nullptr, *tl = nullptr, *tr = nullptr;
+	if (root_grid->bottom_left)
+		bl = assign_points(root_grid->bottom_left, grid_array0, grid_array1);
+	if (root_grid->bottom_right)
+		br = assign_points(root_grid->bottom_right, grid_array0, grid_array1);
+	if (root_grid->top_left)
+		tl = assign_points(root_grid->top_left, grid_array0, grid_array1);
+	if (root_grid->top_right)
+		tr = assign_points(root_grid->top_right, grid_array0, grid_array1);
+
+    return new Grid(bl, br, tl, tr, points,
+                    root_grid->top_right_corner, root_grid->bottom_left_corner, count);
 }
