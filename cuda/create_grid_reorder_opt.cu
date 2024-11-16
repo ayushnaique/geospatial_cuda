@@ -24,7 +24,8 @@ using namespace std;
 
 GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 						 int count, pair<float, float> bottom_left_corner,
-						 pair<float, float> top_right_corner, int start_pos,
+						 pair<float, float> top_right_corner,
+						 int *h_grid_counts, int *d_grid_counts, int start_pos,
 						 int level, int grid_array_flag) {
 	float x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
 		  x2 = top_right_corner.fi, y2 = top_right_corner.se;
@@ -42,14 +43,6 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 		"start_pos=%d\n",
 		level, x1, y1, x2, y2, count, start_pos);
 
-	// Define points for level and sub grid counts
-	int *d_grid_counts;
-
-	// Define grid counts on host after kernel run
-	vector<int> h_grid_counts(4);
-
-	cudaMalloc(&d_grid_counts, 4 * sizeof(int));
-
 	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
 	vprint("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
 
@@ -61,12 +54,6 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 	reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
 		d_grid_points0, d_grid_points1, d_grid_counts, count, range, middle_x,
 		middle_y, start_pos, true);
-
-	// Write the sub grid counts back to host
-	cudaMemcpy(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
-			   cudaMemcpyDeviceToHost);
-
-	cudaFree(d_grid_counts);
 
 	int total = 0;
 	vprint("%d: Point counts per sub grid - \n", level);
@@ -92,18 +79,22 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 
 	// Recursively call the quadtree grid function on each of the 4 sub grids
 	GridArray *bl_grid, *tl_grid, *br_grid, *tr_grid;
-	bl_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[0],
-							bottom_left_corner, mp(middle_x, middle_y),
-							start_pos, level + 1, grid_array_flag ^ 1);
+	bl_grid =
+		quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[0],
+					  bottom_left_corner, mp(middle_x, middle_y), h_grid_counts,
+					  d_grid_counts, start_pos, level + 1, grid_array_flag ^ 1);
 	br_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[1],
-							mp(middle_x, y1), mp(x2, middle_y), br_start_pos,
-							level + 1, grid_array_flag ^ 1);
+							mp(middle_x, y1), mp(x2, middle_y), h_grid_counts,
+							d_grid_counts, br_start_pos, level + 1,
+							grid_array_flag ^ 1);
 	tl_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[2],
-							mp(x1, middle_y), mp(middle_x, y2), tl_start_pos,
-							level + 1, grid_array_flag ^ 1);
+							mp(x1, middle_y), mp(middle_x, y2), h_grid_counts,
+							d_grid_counts, tl_start_pos, level + 1,
+							grid_array_flag ^ 1);
 	tr_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[3],
 							mp(middle_x, middle_y), top_right_corner,
-							tr_start_pos, level + 1, grid_array_flag ^ 1);
+							h_grid_counts, d_grid_counts, tr_start_pos,
+							level + 1, grid_array_flag ^ 1);
 
 	return new GridArray(bl_grid, br_grid, tl_grid, tr_grid, top_right_corner,
 						 bottom_left_corner, count, start_pos, grid_array_flag);
@@ -139,6 +130,7 @@ int main(int argc, char *argv[]) {
 			cerr << "Warning: Skipping malformed line: " << line << endl;
 		}
 	}
+	printf("Generating grid for %d points\n\n", point_count);
 
 	file.close();
 
@@ -153,18 +145,28 @@ int main(int argc, char *argv[]) {
 	cudaMemcpy(d_grid_points0, points.data(), point_count * sizeof(Point),
 			   cudaMemcpyHostToDevice);
 
-	start = clock();
-	GridArray *root_grid =
-		quadtree_grid(d_grid_points0, d_grid_points1, point_count, mp(0.0, 0.0),
-					  mp(max_size, max_size), 0, 0, 0);
-	end = clock();
+	// Allocate page-locked memory (host memory)
+	int *h_grid_counts;
+	cudaHostAlloc(&h_grid_counts, 4 * sizeof(int), cudaHostAllocMapped);
 
+	// Allocate device memory (GPU memory)
+	int *d_grid_counts;
+	cudaHostGetDevicePointer(&d_grid_counts, h_grid_counts, 0);
+
+	// Allocate point arrays for storing final grid arrays from gpu
 	Point *grid_array0 = (Point *)malloc(point_count * sizeof(Point));
 	Point *grid_array1 = (Point *)malloc(point_count * sizeof(Point));
+
+	start = clock();
+	GridArray *root_grid = quadtree_grid(
+		d_grid_points0, d_grid_points1, point_count, mp(0.0, 0.0),
+		mp(max_size, max_size), h_grid_counts, d_grid_counts, 0, 0, 0);
+	// copy the grid arrays from gpu to host
 	cudaMemcpy(grid_array0, d_grid_points0, point_count * sizeof(Point),
 			   cudaMemcpyDeviceToHost);
 	cudaMemcpy(grid_array1, d_grid_points1, point_count * sizeof(Point),
 			   cudaMemcpyDeviceToHost);
+	end = clock();
 
 	// Free d_grid_points after entire grid is created
 	cudaFree(d_grid_points0);
