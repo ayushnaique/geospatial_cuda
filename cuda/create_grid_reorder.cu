@@ -161,6 +161,7 @@ int main(int argc, char *argv[]) {
 			cerr << "Warning: Skipping malformed line: " << line << endl;
 		}
 	}
+	printf("Generating grid for %d points\n\n", point_count);
 
 	file.close();
 

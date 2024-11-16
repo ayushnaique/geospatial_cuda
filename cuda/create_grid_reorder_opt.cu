@@ -55,6 +55,8 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 		d_grid_points0, d_grid_points1, d_grid_counts, count, range, middle_x,
 		middle_y, start_pos, true);
 
+    cudaDeviceSynchronize();
+
 	int total = 0;
 	vprint("%d: Point counts per sub grid - \n", level);
 	for (int i = 0; i < 4; i++) {
@@ -66,11 +68,16 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 		vprint("Sum of sub grid counts matches total point count\n");
 	}
 
+    int bl_count = h_grid_counts[0],
+        br_count = h_grid_counts[1],
+        tl_count = h_grid_counts[2],
+        tr_count = h_grid_counts[3];
+
 	// Store the starting positions from d_grid_points for br, tl, tr
-	int br_start_pos = start_pos + h_grid_counts[0],
-		tl_start_pos = start_pos + h_grid_counts[0] + h_grid_counts[1],
+	int br_start_pos = start_pos + bl_count,
+		tl_start_pos = start_pos + bl_count + br_count,
 		tr_start_pos =
-			start_pos + h_grid_counts[0] + h_grid_counts[1] + h_grid_counts[2];
+			start_pos + bl_count + br_count + tl_count;
 
 	vprint(
 		"%d: Completed grid from (%f,%f) to (%f,%f) for %d points with "
@@ -80,18 +87,18 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 	// Recursively call the quadtree grid function on each of the 4 sub grids
 	GridArray *bl_grid, *tl_grid, *br_grid, *tr_grid;
 	bl_grid =
-		quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[0],
+		quadtree_grid(d_grid_points1, d_grid_points0, bl_count,
 					  bottom_left_corner, mp(middle_x, middle_y), h_grid_counts,
 					  d_grid_counts, start_pos, level + 1, grid_array_flag ^ 1);
-	br_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[1],
+	br_grid = quadtree_grid(d_grid_points1, d_grid_points0, br_count,
 							mp(middle_x, y1), mp(x2, middle_y), h_grid_counts,
 							d_grid_counts, br_start_pos, level + 1,
 							grid_array_flag ^ 1);
-	tl_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[2],
+	tl_grid = quadtree_grid(d_grid_points1, d_grid_points0, tl_count,
 							mp(x1, middle_y), mp(middle_x, y2), h_grid_counts,
 							d_grid_counts, tl_start_pos, level + 1,
 							grid_array_flag ^ 1);
-	tr_grid = quadtree_grid(d_grid_points1, d_grid_points0, h_grid_counts[3],
+	tr_grid = quadtree_grid(d_grid_points1, d_grid_points0, tr_count,
 							mp(middle_x, middle_y), top_right_corner,
 							h_grid_counts, d_grid_counts, tr_start_pos,
 							level + 1, grid_array_flag ^ 1);
