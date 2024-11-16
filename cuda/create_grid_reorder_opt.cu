@@ -22,36 +22,26 @@ using namespace std;
 		printf(s);   \
 	}
 
-Grid *quadtree_grid(Point *points, Point *d_grid_points, int count,
-					pair<float, float> bottom_left_corner,
-					pair<float, float> top_right_corner, int start_pos,
-					int level) {
+GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
+						 int count, pair<float, float> bottom_left_corner,
+						 pair<float, float> top_right_corner,
+						 int *h_grid_counts, int *d_grid_counts, int start_pos,
+						 int level, int grid_array_flag) {
 	float x1 = bottom_left_corner.fi, y1 = bottom_left_corner.se,
 		  x2 = top_right_corner.fi, y2 = top_right_corner.se;
 
 	// Exit condition for recursion
 	if (count < MIN_POINTS or
 		(abs(x1 - x2) < MIN_DISTANCE and abs(y1 - y2) < MIN_DISTANCE)) {
-		return new Grid(nullptr, nullptr, nullptr, nullptr, points,
-						top_right_corner, bottom_left_corner, count);
+		return new GridArray(nullptr, nullptr, nullptr, nullptr,
+							 top_right_corner, bottom_left_corner, count,
+							 start_pos, grid_array_flag);
 	}
 
 	vprint(
 		"%d: Creating grid from (%f,%f) to (%f,%f) for %d points with "
 		"start_pos=%d\n",
 		level, x1, y1, x2, y2, count, start_pos);
-
-	// Define points for level and sub grid counts
-	Point *d_points;
-	int *d_grid_counts;
-
-	// Define grid counts on host after kernel run
-	vector<int> h_grid_counts(4);
-
-	cudaMalloc(&d_points, count * sizeof(Point));
-	cudaMalloc(&d_grid_counts, 4 * sizeof(int));
-
-	cudaMemcpy(d_points, points, count * sizeof(Point), cudaMemcpyHostToDevice);
 
 	float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
 	vprint("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
@@ -62,12 +52,10 @@ Grid *quadtree_grid(Point *points, Point *d_grid_points, int count,
 	vprint("%d: Reorder in GPU: 1 block of %d threads each with range=%d\n",
 		   level, MAX_THREADS_PER_BLOCK, range);
 	reorder_points<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
-		d_points, d_grid_points, d_grid_counts, count, range, middle_x,
-		middle_y, start_pos, false);
+		d_grid_points0, d_grid_points1, d_grid_counts, count, range, middle_x,
+		middle_y, start_pos, true);
 
-	// Write the sub grid counts back to host
-	cudaMemcpy(h_grid_counts.data(), d_grid_counts, 4 * sizeof(int),
-			   cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
 
 	int total = 0;
 	vprint("%d: Point counts per sub grid - \n", level);
@@ -80,55 +68,43 @@ Grid *quadtree_grid(Point *points, Point *d_grid_points, int count,
 		vprint("Sum of sub grid counts matches total point count\n");
 	}
 
-	// Assign the 4 sub grid point arrays based on the returned counts
-	Point *bl = (Point *)malloc(h_grid_counts[0] * sizeof(Point));
-	Point *br = (Point *)malloc(h_grid_counts[1] * sizeof(Point));
-	Point *tl = (Point *)malloc(h_grid_counts[2] * sizeof(Point));
-	Point *tr = (Point *)malloc(h_grid_counts[3] * sizeof(Point));
+    int bl_count = h_grid_counts[0],
+        br_count = h_grid_counts[1],
+        tl_count = h_grid_counts[2],
+        tr_count = h_grid_counts[3];
 
 	// Store the starting positions from d_grid_points for br, tl, tr
-	int br_start_pos = start_pos + h_grid_counts[0],
-		tl_start_pos = start_pos + h_grid_counts[0] + h_grid_counts[1],
+	int br_start_pos = start_pos + bl_count,
+		tl_start_pos = start_pos + bl_count + br_count,
 		tr_start_pos =
-			start_pos + h_grid_counts[0] + h_grid_counts[1] + h_grid_counts[2];
-
-	// Shift the data from device's d_grid_points to host
-	cudaMemcpy(bl, d_grid_points + start_pos, h_grid_counts[0] * sizeof(Point),
-			   cudaMemcpyDeviceToHost);
-	cudaMemcpy(br, d_grid_points + br_start_pos,
-			   h_grid_counts[1] * sizeof(Point), cudaMemcpyDeviceToHost);
-	cudaMemcpy(tl, d_grid_points + tl_start_pos,
-			   h_grid_counts[2] * sizeof(Point), cudaMemcpyDeviceToHost);
-	cudaMemcpy(tr, d_grid_points + tr_start_pos,
-			   h_grid_counts[3] * sizeof(Point), cudaMemcpyDeviceToHost);
-
-	// Free data
-	cudaFree(d_points);
-	cudaFree(d_grid_counts);
+			start_pos + bl_count + br_count + tl_count;
 
 	vprint(
 		"%d: Completed grid from (%f,%f) to (%f,%f) for %d points with "
 		"start_pos=%d\n\n",
 		level, x1, y1, x2, y2, count, start_pos);
 
-	// Recursively call the quadtree grid function on each of the 4 sub grids -
-	// bl, br, tl, tr and store in Grid struct
-	Grid *bl_grid, *tl_grid, *br_grid, *tr_grid;
+	// Recursively call the quadtree grid function on each of the 4 sub grids
+	GridArray *bl_grid, *tl_grid, *br_grid, *tr_grid;
 	bl_grid =
-		quadtree_grid(bl, d_grid_points, h_grid_counts[0], bottom_left_corner,
-					  mp(middle_x, middle_y), start_pos, level + 1);
-	br_grid =
-		quadtree_grid(br, d_grid_points, h_grid_counts[1], mp(middle_x, y1),
-					  mp(x2, middle_y), br_start_pos, level + 1);
-	tl_grid =
-		quadtree_grid(tl, d_grid_points, h_grid_counts[2], mp(x1, middle_y),
-					  mp(middle_x, y2), tl_start_pos, level + 1);
-	tr_grid = quadtree_grid(tr, d_grid_points, h_grid_counts[3],
+		quadtree_grid(d_grid_points1, d_grid_points0, bl_count,
+					  bottom_left_corner, mp(middle_x, middle_y), h_grid_counts,
+					  d_grid_counts, start_pos, level + 1, grid_array_flag ^ 1);
+	br_grid = quadtree_grid(d_grid_points1, d_grid_points0, br_count,
+							mp(middle_x, y1), mp(x2, middle_y), h_grid_counts,
+							d_grid_counts, br_start_pos, level + 1,
+							grid_array_flag ^ 1);
+	tl_grid = quadtree_grid(d_grid_points1, d_grid_points0, tl_count,
+							mp(x1, middle_y), mp(middle_x, y2), h_grid_counts,
+							d_grid_counts, tl_start_pos, level + 1,
+							grid_array_flag ^ 1);
+	tr_grid = quadtree_grid(d_grid_points1, d_grid_points0, tr_count,
 							mp(middle_x, middle_y), top_right_corner,
-							tr_start_pos, level + 1);
+							h_grid_counts, d_grid_counts, tr_start_pos,
+							level + 1, grid_array_flag ^ 1);
 
-	return new Grid(bl_grid, br_grid, tl_grid, tr_grid, points,
-					top_right_corner, bottom_left_corner, count);
+	return new GridArray(bl_grid, br_grid, tl_grid, tr_grid, top_right_corner,
+						 bottom_left_corner, count, start_pos, grid_array_flag);
 }
 
 int main(int argc, char *argv[]) {
@@ -168,30 +144,50 @@ int main(int argc, char *argv[]) {
 	double time_taken;
 	clock_t start, end;
 
-	Point *points_array = (Point *)malloc(point_count * sizeof(Point));
-	for (int i = 0; i < point_count; i++) {
-		points_array[i] = points[i];
-	}
-
 	// Store the d_grid_points array as points_array
-	Point *d_grid_points;
-	cudaMalloc(&d_grid_points, point_count * sizeof(Point));
+	Point *d_grid_points0, *d_grid_points1;
+	cudaMalloc(&d_grid_points0, point_count * sizeof(Point));
+	cudaMalloc(&d_grid_points1, point_count * sizeof(Point));
+
+	cudaMemcpy(d_grid_points0, points.data(), point_count * sizeof(Point),
+			   cudaMemcpyHostToDevice);
+
+	// Allocate page-locked memory (host memory)
+	int *h_grid_counts;
+	cudaHostAlloc(&h_grid_counts, 4 * sizeof(int), cudaHostAllocMapped);
+
+	// Allocate device memory (GPU memory)
+	int *d_grid_counts;
+	cudaHostGetDevicePointer(&d_grid_counts, h_grid_counts, 0);
+
+	// Allocate point arrays for storing final grid arrays from gpu
+	Point *grid_array0 = (Point *)malloc(point_count * sizeof(Point));
+	Point *grid_array1 = (Point *)malloc(point_count * sizeof(Point));
 
 	start = clock();
-	Grid *root_grid = quadtree_grid(points_array, d_grid_points, point_count,
-									mp(0.0, 0.0), mp(max_size, max_size), 0, 0);
+	GridArray *root_grid = quadtree_grid(
+		d_grid_points0, d_grid_points1, point_count, mp(0.0, 0.0),
+		mp(max_size, max_size), h_grid_counts, d_grid_counts, 0, 0, 0);
+	// copy the grid arrays from gpu to host
+	cudaMemcpy(grid_array0, d_grid_points0, point_count * sizeof(Point),
+			   cudaMemcpyDeviceToHost);
+	cudaMemcpy(grid_array1, d_grid_points1, point_count * sizeof(Point),
+			   cudaMemcpyDeviceToHost);
 	end = clock();
 
 	// Free d_grid_points after entire grid is created
-	cudaFree(d_grid_points);
+	cudaFree(d_grid_points0);
+	cudaFree(d_grid_points1);
 
 	time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
 	printf("Time taken = %lf\n\n", time_taken);
 
+	Grid *root = assign_points(root_grid, grid_array0, grid_array1);
+
 	printf("Validating grid...\n");
 	pair<float, float> lower_bound = make_pair(0.0, 0.0);
 	pair<float, float> upper_bound = make_pair(max_size, max_size);
-	bool check = validate_grid(root_grid, upper_bound, lower_bound);
+	bool check = validate_grid(root, upper_bound, lower_bound);
 
 	if (check == true)
 		printf("Grid Verification Success!\n");
