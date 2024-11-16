@@ -55,7 +55,7 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 		d_grid_points0, d_grid_points1, d_grid_counts, count, range, middle_x,
 		middle_y, start_pos, true);
 
-    cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
 
 	int total = 0;
 	vprint("%d: Point counts per sub grid - \n", level);
@@ -68,16 +68,13 @@ GridArray *quadtree_grid(Point *d_grid_points0, Point *d_grid_points1,
 		vprint("Sum of sub grid counts matches total point count\n");
 	}
 
-    int bl_count = h_grid_counts[0],
-        br_count = h_grid_counts[1],
-        tl_count = h_grid_counts[2],
-        tr_count = h_grid_counts[3];
+	int bl_count = h_grid_counts[0], br_count = h_grid_counts[1],
+		tl_count = h_grid_counts[2], tr_count = h_grid_counts[3];
 
 	// Store the starting positions from d_grid_points for br, tl, tr
 	int br_start_pos = start_pos + bl_count,
 		tl_start_pos = start_pos + bl_count + br_count,
-		tr_start_pos =
-			start_pos + bl_count + br_count + tl_count;
+		tr_start_pos = start_pos + bl_count + br_count + tl_count;
 
 	vprint(
 		"%d: Completed grid from (%f,%f) to (%f,%f) for %d points with "

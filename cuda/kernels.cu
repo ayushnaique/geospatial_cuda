@@ -238,9 +238,10 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	}
 }
 
-__global__ void reorder_points_h_alloc(Point* d_points, Point* grid_points, int count, 
-									   int range, float middle_x, float middle_y,
-									   int start_pos, int* d_grid_count) {
+__global__ void reorder_points_h_alloc(Point *d_points, Point *grid_points,
+									   int count, int range, float middle_x,
+									   float middle_y, int start_pos,
+									   int *d_grid_count) {
 	// subgrid_counts declared outside kernel, Dynamic Shared Memory
 	// Accessed using extern
 	extern __shared__ int subgrid_offsets[];
