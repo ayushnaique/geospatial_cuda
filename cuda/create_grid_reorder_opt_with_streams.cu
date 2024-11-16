@@ -140,20 +140,20 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
     br_grid =
         new GridArray(nullptr, nullptr, nullptr, nullptr,
                       mp(x2, middle_y),
-                      mp(middle_x, y1), h_grid_counts[2],
-                      start_pos, grid_array_flag ^ 1);
+                      mp(middle_x, y1), h_grid_counts[1],
+                      br_start_pos, grid_array_flag ^ 1);
 
     tl_grid =
         new GridArray(nullptr, nullptr, nullptr, nullptr,
                       mp(middle_x, y2),
-                      mp(x1, middle_y), h_grid_counts[1],
-                      start_pos, grid_array_flag ^ 1);
+                      mp(x1, middle_y), h_grid_counts[2],
+                      tl_start_pos, grid_array_flag ^ 1);
 
     tr_grid =
         new GridArray(nullptr, nullptr, nullptr, nullptr,
                       mp(x2, y2),
                       mp(middle_x, middle_y), h_grid_counts[3],
-                      start_pos, grid_array_flag ^ 1);
+                      tr_start_pos, grid_array_flag ^ 1);
 
     // return new GridArray(bl_grid, br_grid, tl_grid, tr_grid, top_right_corner,
     // 					 bottom_left_corner, count, start_pos, grid_array_flag);
