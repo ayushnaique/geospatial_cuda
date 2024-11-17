@@ -136,6 +136,8 @@ out*
 grid
 grid_opt
 grid_managed
+grid_host
 grid_reorder
-grid_with_stream
+grid_stream
+grid_inference
 quadtree

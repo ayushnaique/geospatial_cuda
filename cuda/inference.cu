@@ -5,14 +5,14 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 
 #include "kernels.h"
 using namespace std;
 
 #define mp make_pair
-#define fi first
-#define se second
+#define MIN_POINTS 5.0
 
 int main(int argc, char *argv[]) {
 	if (argc < 3) {
@@ -100,6 +100,74 @@ int main(int argc, char *argv[]) {
 		printf("Grid Verification Success!\n");
 	else
 		printf("Grid Verification Failure!\n");
+
+	vector<QuadrantBoundary> boundaries;
+	unordered_map<int, Grid *> grid_map;
+
+	prepare_boundaries(root, 0, nullptr, boundaries, grid_map);
+
+	vector<Query> queries = {
+		{'s', Point(637093.0, 90101.0)},
+		{'i', Point(9981.0, 9979.0)},
+		{'s', Point(9981.0, 9979.0)},
+		{'s', Point(100.0, 100.0)},
+		{'d', Point(9981.0, 9979.0)},
+		{'s', Point(9981.0, 9979.0)}
+		// Add more queries as needed
+	};
+
+	// Test Search
+	vector<int> results = search_quadrant(queries, boundaries);
+	for (int i = 0; i < results.size(); i++) {
+		printf("\n");
+		printf("The point to be searched (%f, %f) with a quadrant id: %d \n",
+			   queries[i].point.x, queries[i].point.y, results[i]);
+		if (results[i] > 0) {
+			auto it = grid_map.find(results[i]);
+			if (it != grid_map.end()) {
+				Grid *current_grid = it->second;
+				bool found = false;
+				for (int j = 0; j < current_grid->count; j++) {
+					if (current_grid->points[j].x == queries[i].point.x &&
+						current_grid->points[j].y == queries[i].point.y) {
+						found = true;
+						break;
+					}
+				}
+				printf("The type of the query is: %c \n", queries[i].type);
+				switch (queries[i].type) {
+					case 's':
+						if (found)
+							printf("Point found in quadrant with ID: %d\n",
+								   results[i]);
+						else
+							printf("Point not found in the grid.\n");
+						break;
+					case 'i':
+						printf("Inserting a point \n");
+						if (found)
+							printf(
+								"Point already exists in quadrant with ID: "
+								"%d\n",
+								results[i]);
+						else
+							insert_point(queries[i].point, grid_map[results[i]],
+										 boundaries);
+						break;
+					case 'd':
+						printf("Deleting a point \n");
+						if (found)
+							delete_point(queries[i].point, grid_map[results[i]],
+										 boundaries, grid_map);
+						else
+							printf("Point does not exist in the grid \n");
+				}
+			} else {
+				printf("Quadrant with ID %d not found in the map.\n",
+					   results[i]);
+			}
+		}
+	}
 
 	return 0;
 }
