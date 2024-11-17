@@ -74,7 +74,7 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
     int range = max(1.0, ceil(value));
     vprint("Reorder in GPU: 1 block of %d threads each with range=%d\n",
            MAX_THREADS_PER_BLOCK, range);
-    reorder_points_h_alloc<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int)>>>(
+    reorder_points_h_alloc<<<1, MAX_THREADS_PER_BLOCK, 8 * sizeof(int), stream>>>(
         d_grid_points0, d_grid_points1, count, range, middle_x,
         middle_y, start_pos, true, d_grid_count, d_start);
 
@@ -177,9 +177,6 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
 
 	// Transfer point data to device
 	cudaMemcpy(d_grid_points0, points_array, point_count * sizeof(Point), cudaMemcpyHostToDevice);
-
-    // current grid keeps changing depending on the stream
-    GridArray *current_grid = nullptr;
 
     // Declare a queue that will store the grids in fifo order
     queue<GridArray*> recursive_grids;
