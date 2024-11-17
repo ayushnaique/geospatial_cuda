@@ -430,7 +430,6 @@ bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 Grid *assign_points(GridArray *root_grid, Point *grid_array0,
 					Point *grid_array1) {
 	int count = root_grid->count, start_pos = root_grid->start_pos;
-	printf("count: %d, start: %d\n", count, start_pos);
 
 	 // Memory allocation for points
     Point *points = (Point *)malloc(count * sizeof(Point));
@@ -444,8 +443,8 @@ Grid *assign_points(GridArray *root_grid, Point *grid_array0,
 
     // Copy points
     for (int i = 0; i < count; i++) {
-        if (start_pos + i >= count) {
-                printf("count=%d, start_pos=%d, i=%d", count, start_pos, i);
+        if (start_pos + i >= count + start_pos) {
+            printf("count=%d, start_pos=%d, i=%d", count, start_pos, i);
             fprintf(stderr, "Invalid memory access in grid_array!\n");
             free(points); // Clean up memory
             exit(EXIT_FAILURE);

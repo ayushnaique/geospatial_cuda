@@ -226,7 +226,7 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
             }
 
             if(sub_grid != nullptr && root != nullptr) {
-                addGrid(root_grid, sub_grid, i);
+                addGrid(root, sub_grid, i);
                 recursive_grids.push(sub_grid);
 
                 float x1 = sub_grid->bottom_left_corner.fi,
@@ -271,7 +271,7 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
     printf("Time taken = %lf\n", time_taken);
 
     printf("calling assign_points\n");
-    Grid *root = assign_points(recursive_grids.front(), grid_array0, grid_array1);
+    Grid *root = assign_points(root_grid, grid_array0, grid_array1);
 
     return root;
 }
