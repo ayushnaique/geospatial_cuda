@@ -1,5 +1,6 @@
 CC=nvcc
 CFLAGS=-I. -g
+OMPFLAG=-Xcompiler -Wall -Xcompiler -fopenmp
 
 grid: create_grid.cu kernels.cu
 	$(CC) -o grid create_grid.cu kernels.cu $(CFLAGS)
@@ -20,7 +21,7 @@ grid_stream1: create_grid_reorder_opt_with_streams.cu kernels.cu
 	$(CC) -o grid_stream1 create_grid_reorder_opt_with_streams.cu kernels.cu $(CFLAGS)
 
 grid_alloc: streams.cu kernels.cu
-	$(CC) -o grid_stream streams.cu kernels.cu $(CFLAGS)
+	$(CC) -o grid_stream streams.cu kernels.cu $(CFLAGS) $(OMPFLAG)
 
 clean:
 	rm -f create_grid *~
