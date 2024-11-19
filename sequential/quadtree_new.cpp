@@ -7,6 +7,11 @@ using namespace std;
 #define se second
 #define MIN_POINTS 5.0
 #define MIN_DISTANCE 5.0
+#define VERBOSE false
+#define vprint(s...) \
+	if (VERBOSE) {   \
+		printf(s);   \
+	}
 
 // Structure to store point data in the grid, will be in an array
 struct Point {
@@ -126,7 +131,7 @@ Grid* quadtree_grid(Point *points, int count,
 						lower_bound, count);
 	}
 
-	printf("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
+	vprint("%d: Creating grid from (%f,%f) to (%f,%f) for %d points\n", level,
 		   x1, y1, x2, y2, count);
 
 	// Declare array to store the quadrant in which the point will be located.
@@ -136,20 +141,20 @@ Grid* quadtree_grid(Point *points, int count,
     
     // Calculate the middle points of the grid
     float middle_x = (x2 + x1) / 2, middle_y = (y2 + y1) / 2;
-	printf("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
+	vprint("mid_x = %f, mid_y = %f\n", middle_x, middle_y);
 
     // Call categorize points function
     categorize_points(points, categories, grid_counts, count, middle_x, middle_y);
 
     int total = 0;
-	printf("%d: Point counts per sub grid - \n", level);
+	vprint("%d: Point counts per sub grid - \n", level);
 	for (int i = 0; i < 4; i++) {
-		printf("sub grid %d - %d\n", i + 1, grid_counts[i]);
+		vprint("sub grid %d - %d\n", i + 1, grid_counts[i]);
 		total += grid_counts[i];
 	}
-	printf("Total Count - %d\n", count);
+	vprint("Total Count - %d\n", count);
 	if (total == count) {
-		printf("Sum of sub grid counts matches total point count\n");
+		vprint("Sum of sub grid counts matches total point count\n");
 	}
 
     // Declare arrays for each section of the grid and allocate memory depending
@@ -166,7 +171,7 @@ Grid* quadtree_grid(Point *points, int count,
     // Deallocate categories
     delete []categories;
 
-	printf("\n\n");
+	vprint("\n\n");
 
     // Recursively call the quadtree grid function on each of the 4 sub grids -
 	// bl, br, tl, tr and store in Grid struct
@@ -215,13 +220,13 @@ bool validate_grid(Grid *root_grid, pair<float, float> &top_right_corner,
 			float point_y = point_array[i].y;
 
 			if (point_x < bot_x || point_x > top_x) {
-				printf(
+				vprint(
 					"Validation Error! Point (%f, %f) is plced out of bounds. "
 					"Grid dimension: [(%f, %f), (%f, %f)]\n",
 					point_x, point_y, bot_x, bot_y, top_x, top_y);
 				return false;
 			} else if (point_y < bot_y || point_y > top_y) {
-				printf(
+				vprint(
 					"Validation Error! Point (%f, %f) is plced out of bounds. "
 					"Grid dimension: [(%f, %f), (%f, %f)]\n",
 					point_x, point_y, bot_x, bot_y, top_x, top_y);
