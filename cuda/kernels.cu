@@ -187,8 +187,9 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	}
 	for (int i = start; i < start + range; i++) {
 		if (i < end) {
-            category = (d_points[i].y > middle_y) * 2 + (d_points[i].x > middle_x); 
-            atomicAdd(&subgrid_offsets[category], 1);
+			category =
+				(d_points[i].y > middle_y) * 2 + (d_points[i].x > middle_x);
+			atomicAdd(&subgrid_offsets[category], 1);
 		}
 	}
 
@@ -208,7 +209,8 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	// grid_points
 	for (int i = start; i < start + range; i++) {
 		if (i < end) {
-            category = (d_points[i].y > middle_y) * 2 + (d_points[i].x > middle_x); 
+			category =
+				(d_points[i].y > middle_y) * 2 + (d_points[i].x > middle_x);
 			unsigned int index = atomicAdd(&subgrid_offsets[4 + category], 1);
 			grid_points[index] = d_points[i];
 		}
