@@ -135,6 +135,7 @@ points*.txt
 out*
 grid
 grid_opt
+grid_opt_v1
 grid_managed
 grid_host
 grid_reorder
