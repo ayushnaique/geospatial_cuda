@@ -111,6 +111,11 @@ __global__ void reorder_points_h_alloc(Point *d_points_array,
 									   float middle_y, int start_pos,
 									   int *d_grid_count);
 
+// For streams use
+__global__ void reorder_points_h_alloc_stream(Point* d_points, Point* grid_points, int count, 
+									   int range, float middle_x, float middle_y,
+									   int start_pos, bool opt, int* d_grid_count, int d_start);
+
 GridArray *construct_grid_array(Point *d_grid_points0, Point *d_grid_points1,
 								int count,
 								pair<float, float> bottom_left_corner,

@@ -225,6 +225,7 @@ __global__ void reorder_points(Point *d_points, Point *grid_points,
 	}
 }
 
+// kernel function for host_alloc_sequential
 __global__ void reorder_points_h_alloc(Point *d_points, Point *grid_points,
 									   int count, int range, float middle_x,
 									   float middle_y, int start_pos,
@@ -333,6 +334,123 @@ __global__ void reorder_points_h_alloc(Point *d_points, Point *grid_points,
 		d_grid_count[1] = subgrid_offsets[1];
 		d_grid_count[2] = subgrid_offsets[2];
 		d_grid_count[3] = subgrid_offsets[3];
+	}
+}
+
+// kernel function for streams implementation
+__global__ void reorder_points_h_alloc_stream(Point* d_points, Point* grid_points, int count, 
+									   int range, float middle_x, float middle_y,
+									   int start_pos, bool opt, int* d_grid_count, int d_start) {
+	// subgrid_counts declared outside kernel, Dynamic Shared Memory
+	// Accessed using extern
+	extern __shared__ int subgrid_offsets[];
+
+	// create a thread group for 32 threads (warp grouping)
+	cg::thread_block block = cg::this_thread_block();
+	cg::thread_block_tile<32> warp = cg::tiled_partition<32>(block);
+
+	// Initialize the subgrid counts to 0
+	if (threadIdx.x == 0) {
+		subgrid_offsets[0] = 0;
+		subgrid_offsets[1] = 0;
+		subgrid_offsets[2] = 0;
+		subgrid_offsets[3] = 0;
+		d_grid_count[d_start * 4] = 0;
+		d_grid_count[1 + d_start * 4] = 0;
+		d_grid_count[2 + d_start * 4] = 0;
+		d_grid_count[3 + d_start * 4] = 0;
+	}
+	__syncthreads();
+
+	// Iterate through all the points in d_points and count points in every
+	// category
+	int start = threadIdx.x * range, end = count, first = 0, second = 0, third = 0,
+		fourth = 0, category;
+	
+	if (opt) {
+		start += start_pos;
+		end += start_pos;
+	}
+
+	for (int i = start; i < start + range; i++) {
+		if (i < end) {
+			// bottom left; if the point lies in bottom left, increment
+			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
+				first++;
+			}
+			// bottom right; if point lies in bottom right, increment
+			else if (d_points[i].x > middle_x and d_points[i].y <= middle_y) {
+				second++;
+			}
+			// top left; if point lies in top left, increment
+			else if (d_points[i].x <= middle_x and d_points[i].y > middle_y) {
+				third++;
+			}
+			// top right; if point lies in top right, increment
+			else if (d_points[i].x > middle_x and d_points[i].y > middle_y) {
+				fourth++;
+			}
+		}
+	}
+
+	// sum up all the sub quadrant counts inside a warp
+	first = reduce_sum(first, warp);
+	second = reduce_sum(second, warp);
+	third = reduce_sum(third, warp);
+	fourth = reduce_sum(fourth, warp);
+
+	// Only the first thread in each warp writes to shared memory
+	if (warp.thread_rank() == 0) {
+		atomicAdd(&subgrid_offsets[0], first);
+		atomicAdd(&subgrid_offsets[1], second);
+		atomicAdd(&subgrid_offsets[2], third);
+		atomicAdd(&subgrid_offsets[3], fourth);
+	}
+	__syncthreads();
+
+	// Calculate the start position for every sub grid category and store in
+	// shared memory
+	if (threadIdx.x == 0) {
+		subgrid_offsets[4] = start_pos;
+		subgrid_offsets[5] = start_pos + subgrid_offsets[0];
+		subgrid_offsets[6] = subgrid_offsets[5] + subgrid_offsets[1];
+		subgrid_offsets[7] = subgrid_offsets[6] + subgrid_offsets[2];
+	}
+
+	// Iterate through every point in d_points and depending on the category,
+	// find latest index for category and insert point into that index within
+	// grid_points
+	for (int i = start; i < start + range; i++) {
+		if (i < end) {
+			// bottom left; if the point lies in bottom left, increment
+			if (d_points[i].x <= middle_x and d_points[i].y <= middle_y) {
+				category = 0;
+			}
+			// bottom right; if point lies in bottom right, increment
+			else if (d_points[i].x > middle_x and d_points[i].y <= middle_y) {
+				category = 1;
+			}
+			// top left; if point lies in top left, increment
+			else if (d_points[i].x <= middle_x and d_points[i].y > middle_y) {
+				category = 2;
+			}
+			// top right; if point lies in top right, increment
+			else if (d_points[i].x > middle_x and d_points[i].y > middle_y) {
+				category = 3;
+			}
+
+			// atomic add at offset value and insert into grid_points
+			unsigned int index = atomicAdd(&subgrid_offsets[4 + category], 1);
+			grid_points[index] = d_points[i];
+		}
+	}
+
+	// Assign grid_counts as the counts of subgrids
+	if (threadIdx.x == 0) {
+		d_grid_count[d_start * 4] = subgrid_offsets[0];
+		d_grid_count[d_start * 4 + 1] = subgrid_offsets[1];
+		d_grid_count[d_start * 4 + 2] = subgrid_offsets[2];
+		d_grid_count[d_start * 4 + 3] = subgrid_offsets[3];
 	}
 }
 
