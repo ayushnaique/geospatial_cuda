@@ -84,8 +84,8 @@ pair<Point *, Point *> quadtree_grid(Point *d_grid_points0, Point *d_grid_points
     vprint("Point counts per sub grid - \n");
     for (int i = d_start * 4; i < (d_start + 1) * 4; i++)
     {
-        vprint("sub grid %d - %d\n", i + 1, h_grid_count[i]);
-        total += h_grid_count[i];
+        vprint("sub grid %d - %d\n", i + 1, h_grid_count[i + d_start * 4]);
+        total += h_grid_count[i + d_start * 4];
     }
     vprint("Total Count - %d\n", count);
     if (total == count)
