@@ -231,15 +231,15 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
                       x2 = sub_grid->top_right_corner.fi,
                       y2 = sub_grid->top_right_corner.se;
 
-                if (!(sub_grid->count < MIN_POINTS ||
-                        (abs(x1 - x2) < MIN_DISTANCE && abs(y1 - y2) < MIN_DISTANCE)))
-                {
+                // if (!(sub_grid->count < MIN_POINTS ||
+                //         (abs(x1 - x2) < MIN_DISTANCE && abs(y1 - y2) < MIN_DISTANCE)))
+                // {
                     // Launch quadtree_grid asynchronously in the selected stream
                     grid_ptrs_2d = quadtree_grid(grid_ptrs_2d.fi, grid_ptrs_2d.se, sub_grid->count,
                                                 sub_grid->bottom_left_corner,
                                                 sub_grid->top_right_corner, sub_grid->start_pos, sub_grid->grid_array_flag, streams[i],
                                                 grid_q, h_grid_count, d_grid_count, i);
-                }
+                // }
             }
         }   
         if(flg) 

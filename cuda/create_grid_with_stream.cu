@@ -237,7 +237,6 @@ Grid *build_quadtree_levels(Point *points, int point_count,
 				  (abs(x1 - x2) < MIN_DISTANCE and
 				   abs(y1 - y2) < MIN_DISTANCE))) {
 				cudaStreamCreate(&(streams[i]));
-				vprint("Stream %d created \n", i);
 				quadtree_grid(popped_grid->points, popped_grid->count,
 							  popped_grid->bottom_left_corner,
 							  popped_grid->top_right_corner, streams[i],

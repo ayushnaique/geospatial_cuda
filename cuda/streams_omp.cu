@@ -262,8 +262,8 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
                         float x2 = sub_grid->top_right_corner.fi;
                         float y2 = sub_grid->top_right_corner.se;
 
-                        if (!(sub_grid->count < MIN_POINTS ||
-                            (abs(x1 - x2) < MIN_DISTANCE && abs(y1 - y2) < MIN_DISTANCE))) {
+                        // if (!(sub_grid->count < MIN_POINTS ||
+                        //     (abs(x1 - x2) < MIN_DISTANCE && abs(y1 - y2) < MIN_DISTANCE))) {
                             // Launch quadtree_grid asynchronously in the selected stream
                             grid_ptrs_2d = quadtree_grid(
                                 grid_ptrs_2d.fi, grid_ptrs_2d.se, sub_grid->count,
@@ -271,7 +271,7 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
                                 sub_grid->start_pos, sub_grid->grid_array_flag,
                                 streams[i], grid_q, h_grid_count,
                                 d_grid_count, i, level + 1, lock_q);
-                        }
+                        // }
                     }
                 }
 
