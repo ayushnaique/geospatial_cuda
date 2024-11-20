@@ -221,74 +221,71 @@ Grid *build_quadtree_levels(vector<Point> points, int point_count,
                                  tr, 0, 0, nullptr, grid_q, h_grid_count, d_grid_count, 0, level, lock_q);
 
     #pragma omp parallel num_threads(maxStreams) // create threads = maxStreams i.e. 4 Threads here
-    // Loop until all the GridArrays in the queue are taken care of
-    while (!grid_q->empty()) {
-        bool flg = false;
+    {
+        // Loop until all the GridArrays in the queue are taken care of
+        while (!grid_q->empty()) {
+            bool flg = false;
 
-            #pragma omp for // Instruct the threads to work on each value of i independently
-            for(int i = 0; i < maxStreams; i ++) {
-                // for loop here ....
-                GridArray *root = nullptr;
-                GridArray *sub_grid = nullptr;
+                #pragma omp for // Instruct the threads to work on each value of i independently
+                for(int i = 0; i < maxStreams; i ++) {
+                    // for loop here ....
+                    GridArray *root = nullptr;
+                    GridArray *sub_grid = nullptr;
 
-                // Thread-safe access to shared containers
-                omp_set_lock(&lock1);
-                {
-                    if (!recursive_grids.empty()) {
-                        root = recursive_grids.front();
-                        flg = true;
-                        // recursive_grids.pop();
-                    }
-
-                    if (!grid_q->empty()) {
-                        sub_grid = grid_q->front();
-                        grid_q->pop();
-                    }
-                }
-                omp_unset_lock(&lock1);
-
-                // Process the grids only if valid
-                if (sub_grid != nullptr && root != nullptr) {
-                    addGrid(root, sub_grid, i);
-                    omp_set_lock(&lock2);
+                    // Thread-safe access to shared containers
+                    omp_set_lock(&lock1);
                     {
-                        recursive_grids.push(sub_grid);
+                        if (!recursive_grids.empty()) {
+                            root = recursive_grids.front();
+                            flg = true;
+                            // recursive_grids.pop();
+                        }
+
+                        if (!grid_q->empty()) {
+                            sub_grid = grid_q->front();
+                            grid_q->pop();
+                        }
                     }
-                    omp_unset_lock(&lock2);
+                    omp_unset_lock(&lock1);
 
-                    float x1 = sub_grid->bottom_left_corner.fi;
-                    float y1 = sub_grid->bottom_left_corner.se;
-                    float x2 = sub_grid->top_right_corner.fi;
-                    float y2 = sub_grid->top_right_corner.se;
+                    // Process the grids only if valid
+                    if (sub_grid != nullptr && root != nullptr) {
+                        addGrid(root, sub_grid, i);
+                        omp_set_lock(&lock2);
+                        {
+                            recursive_grids.push(sub_grid);
+                        }
+                        omp_unset_lock(&lock2);
 
-                    if (!(sub_grid->count < MIN_POINTS ||
-                        (abs(x1 - x2) < MIN_DISTANCE && abs(y1 - y2) < MIN_DISTANCE))) {
-                        // Launch quadtree_grid asynchronously in the selected stream
-                        grid_ptrs_2d = quadtree_grid(
-                            grid_ptrs_2d.fi, grid_ptrs_2d.se, sub_grid->count,
-                            sub_grid->bottom_left_corner, sub_grid->top_right_corner,
-                            sub_grid->start_pos, sub_grid->grid_array_flag,
-                            streams[i], grid_q, h_grid_count,
-                            d_grid_count, i, level + 1, lock_q);
+                        float x1 = sub_grid->bottom_left_corner.fi;
+                        float y1 = sub_grid->bottom_left_corner.se;
+                        float x2 = sub_grid->top_right_corner.fi;
+                        float y2 = sub_grid->top_right_corner.se;
+
+                        if (!(sub_grid->count < MIN_POINTS ||
+                            (abs(x1 - x2) < MIN_DISTANCE && abs(y1 - y2) < MIN_DISTANCE))) {
+                            // Launch quadtree_grid asynchronously in the selected stream
+                            grid_ptrs_2d = quadtree_grid(
+                                grid_ptrs_2d.fi, grid_ptrs_2d.se, sub_grid->count,
+                                sub_grid->bottom_left_corner, sub_grid->top_right_corner,
+                                sub_grid->start_pos, sub_grid->grid_array_flag,
+                                streams[i], grid_q, h_grid_count,
+                                d_grid_count, i, level + 1, lock_q);
+                        }
                     }
                 }
+
+            #pragma omp barrier
+            // vprint("4 iterations done using 1 pass of the streams\n");
+            // Ensure 'flg' is set correctly to indicate recursive_grids was processed
+            #pragma omp single
+            {
+                if (!flg && !recursive_grids.empty()) {
+                    recursive_grids.pop();
+                }
+                level += 1;
             }
-
-        #pragma omp barrier
-        // vprint("4 iterations done using 1 pass of the streams\n");
-        // Ensure 'flg' is set correctly to indicate recursive_grids was processed
-        #pragma omp single
-        if (!flg && !recursive_grids.empty()) {
-            recursive_grids.pop();
-        }
-
-        #pragma omp single
-        {   
-            level += 1;
-            // cudaStreamSynchronize(streams[0]);
-            // cudaStreamSynchronize(streams[1]);
-            // cudaStreamSynchronize(streams[2]);
-            // cudaStreamSynchronize(streams[3]);
+            
         }
     }
 
